@@ -251,7 +251,11 @@ size_t visible_width(struct hwc_context_t *ctx, hwc_layer_1_t &layer)
 
 static bool blending_is_supported(int32_t blending)
 {
+#ifdef NO_BLENDING
+    return blending_to_s3c_blending(blending) == S3C_FB_BLENDING_NONE;
+#else
     return blending_to_s3c_blending(blending) < S3C_FB_BLENDING_MAX;
+#endif
 }
 
 bool is_offscreen(struct hwc_context_t *ctx, hwc_layer_1_t &layer)
@@ -314,7 +318,11 @@ bool is_overlay_supported(struct hwc_context_t *ctx, hwc_layer_1_t &layer, size_
         return false;
     }
     if (!blending_is_supported(layer.blending)) {
+#ifdef NO_BLENDING
+        ALOGV("\tlayer %u: blending %d not supported", i, layer.blending);
+#else
         ALOGW("\tlayer %u: blending %d not supported", i, layer.blending);
+#endif
         return false;
     }
     if (UNLIKELY(is_offscreen(ctx, layer))) {
@@ -359,7 +367,11 @@ void determineSupportedOverlays(hwc_context_t *ctx, hwc_display_contents_1_t *co
             continue;
         }
 
+#ifdef NO_BLENDING
+        if (is_overlay_supported(ctx, contents->hwLayers[i], i) && !ctx->force_fb && contents->numHwLayers > 2) {
+#else
         if (is_overlay_supported(ctx, contents->hwLayers[i], i) && !ctx->force_fb) {
+#endif
             ALOGV("\tlayer %u: overlay supported", i);
             layer.compositionType = HWC_OVERLAY;
             continue;
