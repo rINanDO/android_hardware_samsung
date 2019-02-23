@@ -33,9 +33,11 @@
 #include <math.h>
 #include <sys/poll.h>
 
-#include <cutils/log.h>
+#include <log/log.h>
 
 #include "jpeg_hal.h"
+
+#pragma clang diagnostic ignored "-Wunused-function"
 
 #ifdef JPEG_PERF_MEAS
 unsigned long measure_time(struct timeval *start, struct timeval *stop)
