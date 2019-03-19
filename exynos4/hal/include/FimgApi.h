@@ -18,6 +18,10 @@
 **
 */
 
+#pragma clang diagnostic ignored "-Wunused-parameter"
+#pragma clang diagnostic ignored "-Wmismatched-tags"
+#pragma clang diagnostic ignored "-Wunused-variable"
+
 #ifndef FIMG_API_H
 #define FIMG_API_H
 

@@ -17,6 +17,10 @@
 **
 */
 
+#pragma clang diagnostic ignored "-Wunused-parameter"
+#pragma clang diagnostic ignored "-Wmismatched-tags"
+#pragma clang diagnostic ignored "-Wunused-variable"
+
 #define LOG_NDEBUG 0
 #define LOG_TAG "FimgExynos4"
 #include <utils/Log.h>
