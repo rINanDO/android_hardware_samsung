@@ -17,6 +17,11 @@
 **
 */
 
+#pragma clang diagnostic ignored "-Wsign-compare"
+#pragma clang diagnostic ignored "-Wformat"
+/* C++11 violation */
+#pragma clang diagnostic ignored "-Wwritable-strings"
+
 #define LOG_NDEBUG 0
 #define LOG_TAG "SKIA"
 #include <utils/Log.h>
