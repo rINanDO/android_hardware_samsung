@@ -970,7 +970,7 @@ OMX_ERRORTYPE SEC_MFC_H264_Decode_Nonblock(OMX_COMPONENTTYPE *pOMXComponent, SEC
 #endif
 
     FunctionIn();
-    if (pSECInputPort->portDefinition.format.video.nFrameWidth > 1920 ||
+    if (pSECInputPort->portDefinition.format.video.nFrameWidth > 1920 &&
         pSECInputPort->portDefinition.format.video.nFrameHeight > 1088) {
         SEC_OSAL_Log(SEC_LOG_ERROR, "Unsupported video size: %d, %d.",
                     pSECInputPort->portDefinition.format.video.nFrameWidth,
