@@ -769,6 +769,7 @@ OMX_BOOL SEC_Preprocessor_InputData(OMX_COMPONENTTYPE *pOMXComponent)
                     SEC_OSAL_Log(SEC_LOG_TRACE, "width:%d, height:%d, Csize:%d", width, height, ALIGN_TO_8KB(ALIGN_TO_128B(width) * ALIGN_TO_32B(height / 2)));
 
                     if (pSECPort->bStoreMetaData == OMX_FALSE) {
+
                         switch (pSECPort->portDefinition.format.video.eColorFormat) {
                         case OMX_COLOR_FormatYUV420Planar:
                             /* YUV420Planar case it needed changed interleave UV plane (MFC spec.)*/
@@ -799,13 +800,14 @@ OMX_BOOL SEC_Preprocessor_InputData(OMX_COMPONENTTYPE *pOMXComponent)
 #ifdef USE_METADATABUFFERTYPE
                     else {
                         if (pSECPort->portDefinition.format.video.eColorFormat == OMX_COLOR_FormatAndroidOpaque) {
+
                             OMX_PTR ppBuf[3];
                             OMX_PTR pOutBuffer;
 
                             SEC_OSAL_GetInfoFromMetaData(inputData, ppBuf);
                             SEC_OSAL_LockANBHandle((OMX_U32)ppBuf[0], width, height, OMX_COLOR_FormatAndroidOpaque, &pOutBuffer);
 
-                            csc_ARGB8888_to_YUV420SP_NEON(pVideoEnc->MFCEncInputBuffer[pVideoEnc->indexInputBuffer].YVirAddr,
+                            csc_ABGR8888_to_YUV420SP_NEON(pVideoEnc->MFCEncInputBuffer[pVideoEnc->indexInputBuffer].YVirAddr,
                                                     pVideoEnc->MFCEncInputBuffer[pVideoEnc->indexInputBuffer].CVirAddr,
                                                     pOutBuffer, width, height);
 

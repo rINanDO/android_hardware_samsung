@@ -1724,3 +1724,53 @@ void csc_ARGB8888_to_YUV420SP(
         }
     }
 }
+
+void csc_ABGR8888_to_YUV420SP(
+    unsigned char *y_dst,
+    unsigned char *uv_dst,
+    unsigned char *rgb_src,
+    unsigned int width,
+    unsigned int height)
+{
+    unsigned int i, j;
+    unsigned int tmp;
+
+    unsigned int R, G, B;
+    unsigned int Y, U, V;
+
+    unsigned int *pSrc = (unsigned int *)rgb_src;
+
+    unsigned char *pDstY = (unsigned char *)y_dst;
+    unsigned char *pDstUV = (unsigned char *)uv_dst;
+
+    unsigned int yIndex = 0;
+    unsigned int uvIndex = 0;
+
+    for (j = 0; j < height; j++) {
+        for (i = 0; i < width; i++) {
+            tmp = pSrc[j * width + i];
+
+            B = (tmp & 0x00FF0000) >> 16;
+            G = (tmp & 0x0000FF00) >> 8;
+            R = (tmp & 0x000000FF) >> 0;
+
+            Y = ((66 * R) + (129 * G) + (25 * B) + 128);
+            Y = Y >> 8;
+            Y += 16;
+
+            pDstY[yIndex++] = (unsigned char)Y;
+
+            if ((j % 2) == 0 && (i % 2) == 0) {
+                U = ((-38 * R) - (74 * G) + (112 * B) + 128);
+                U = U >> 8;
+                U += 128;
+                V = ((112 * R) - (94 * G) - (18 * B) + 128);
+                V = V >> 8;
+                V += 128;
+
+                pDstUV[uvIndex++] = (unsigned char)U;
+                pDstUV[uvIndex++] = (unsigned char)V;
+            }
+        }
+    }
+}

@@ -418,4 +418,10 @@ void csc_ARGB8888_to_YUV420SP_NEON(
     unsigned int width,
     unsigned int height);
 
+void csc_ABGR8888_to_YUV420SP(
+    unsigned char *y_dst,
+    unsigned char *uv_dst,
+    unsigned char *rgb_src,
+    unsigned int width,
+    unsigned int height);
 #endif /*COLOR_SPACE_CONVERTOR_H_*/
