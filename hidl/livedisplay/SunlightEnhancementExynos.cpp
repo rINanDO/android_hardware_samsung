@@ -32,9 +32,16 @@ namespace V2_0 {
 namespace samsung {
 
 static constexpr const char* kLUXPath = "/sys/class/mdnie/mdnie/lux";
+static constexpr const char* kSREPath = "/sys/class/mdnie/mdnie/outdoor";
 
 // Methods from ::vendor::lineage::livedisplay::V2_0::ISunlightEnhancement follow.
 bool SunlightEnhancementExynos::isSupported() {
+    std::fstream sre(kSREPath, sre.in | sre.out);
+    if (sre.good()) {
+        mHasSRE = true;
+        return true;
+    }
+
     std::fstream file(kLUXPath, file.in | file.out);
     return file.good();
 }
@@ -44,7 +51,9 @@ Return<bool> SunlightEnhancementExynos::isEnabled() {
     std::string tmp;
     int32_t contents = 0;
 
-    if (ReadFileToString(kLUXPath, &tmp)) {
+    if (mHasSRE && ReadFileToString(kSREPath, &tmp)) {
+        contents = std::stoi(Trim(tmp));
+    } else if (ReadFileToString(kLUXPath, &tmp)) {
         contents = std::stoi(Trim(tmp));
     }
 
@@ -52,6 +61,9 @@ Return<bool> SunlightEnhancementExynos::isEnabled() {
 }
 
 Return<bool> SunlightEnhancementExynos::setEnabled(bool enabled) {
+    if (mHasSRE) {
+        return WriteStringToFile(enabled ? "1" : "0", kSREPath, true);
+    }
     /* see drivers/video/fbdev/exynos/decon_7880/panels/mdnie_lite_table*, get_hbm_index */
     return WriteStringToFile(enabled ? "40000" : "0", kLUXPath, true);
 }
