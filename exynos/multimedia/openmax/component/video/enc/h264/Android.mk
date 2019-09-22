@@ -40,6 +40,7 @@ LOCAL_C_INCLUDES := $(SEC_OMX_INC)/khronos \
 	$(SEC_OMX_TOP)/core \
 	$(SEC_OMX_COMPONENT)/common \
 	$(SEC_OMX_COMPONENT)/video/enc \
-    $(TARGET_OUT_HEADERS)/$(SEC_COPY_HEADERS_TO)
+    $(TARGET_OUT_HEADERS)/$(SEC_COPY_HEADERS_TO) \
+	$(SEC_OMX_TOP)/../codecs/video/exynos4/mfc/include
 
 include $(BUILD_SHARED_LIBRARY)
