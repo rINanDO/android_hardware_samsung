@@ -307,6 +307,10 @@ static void processWakeupCallback(int fd, short flags, void *param) {
 }
 
 static void resendLastNITZTimeData(RIL_SOCKET_ID socket_id) {
+    if (s_lastNITZTimeData != NULL) {
+        int responseType = (s_callbacks.version >= 13)
+                           ? RESPONSE_UNSOLICITED_ACK_EXP
+                           : RESPONSE_UNSOLICITED;
         // acquire read lock for the service before calling nitzTimeReceivedInd() since it reads
         // nitzTimeReceived in ril_service
         pthread_rwlock_t *radioServiceRwlockPtr = radio::getRadioServiceRwlock(
@@ -314,10 +318,6 @@ static void resendLastNITZTimeData(RIL_SOCKET_ID socket_id) {
         int rwlockRet = pthread_rwlock_rdlock(radioServiceRwlockPtr);
         assert(rwlockRet == 0);
 
-    if (s_lastNITZTimeData != NULL) {
-        int responseType = (s_callbacks.version >= 13)
-                           ? RESPONSE_UNSOLICITED_ACK_EXP
-                           : RESPONSE_UNSOLICITED;
         int ret = radio::nitzTimeReceivedInd(
             (int)socket_id, responseType, 0,
             RIL_E_SUCCESS, s_lastNITZTimeData, s_lastNITZTimeDataSize);
@@ -775,6 +775,7 @@ void RIL_onUnsolicitedResponse(int unsolResponse, const void *data,
     RIL_SOCKET_ID soc_id = RIL_SOCKET_1;
     UnsolResponseInfo *pRI = NULL;
     int32_t pRI_elements;
+
 #if defined(ANDROID_MULTI_SIM)
     soc_id = socket_id;
 #endif
@@ -787,6 +788,7 @@ void RIL_onUnsolicitedResponse(int unsolResponse, const void *data,
     }
 
     unsolResponseIndex = unsolResponse - RIL_UNSOL_RESPONSE_BASE;
+
     pRI = s_unsolResponses;
     pRI_elements = (int32_t)NUM_ELEMS(s_unsolResponses);
 
@@ -889,7 +891,7 @@ void RIL_onUnsolicitedResponse(int unsolResponse, const void *data,
     }
 
 #if VDBG
-    RLOGI("%s UNSOLICITED: %s length:%d", rilSocketIdToString(soc_id),
+    RLOGI("%s UNSOLICITED: %s length:%zu", rilSocketIdToString(soc_id),
             requestToString(unsolResponse), datalen);
 #endif
 
@@ -1232,6 +1234,7 @@ requestToString(int request) {
         case RIL_REQUEST_GET_ACTIVITY_INFO: return "GET_ACTIVITY_INFO";
         case RIL_REQUEST_SET_CARRIER_RESTRICTIONS: return "SET_CARRIER_RESTRICTIONS";
         case RIL_REQUEST_GET_CARRIER_RESTRICTIONS: return "GET_CARRIER_RESTRICTIONS";
+        case RIL_REQUEST_SET_CARRIER_INFO_IMSI_ENCRYPTION: return "SET_CARRIER_INFO_IMSI_ENCRYPTION";
         case RIL_RESPONSE_ACKNOWLEDGEMENT: return "RESPONSE_ACKNOWLEDGEMENT";
         case RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED: return "UNSOL_RESPONSE_RADIO_STATE_CHANGED";
         case RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED: return "UNSOL_RESPONSE_CALL_STATE_CHANGED";
@@ -1277,6 +1280,7 @@ requestToString(int request) {
         case RIL_UNSOL_DC_RT_INFO_CHANGED: return "UNSOL_DC_RT_INFO_CHANGED";
         case RIL_UNSOL_RADIO_CAPABILITY: return "UNSOL_RADIO_CAPABILITY";
         case RIL_UNSOL_MODEM_RESTART: return "UNSOL_MODEM_RESTART";
+        case RIL_UNSOL_CARRIER_INFO_IMSI_ENCRYPTION: return "UNSOL_CARRIER_INFO_IMSI_ENCRYPTION";
         case RIL_UNSOL_ON_SS: return "UNSOL_ON_SS";
         case RIL_UNSOL_STK_CC_ALPHA_NOTIFY: return "UNSOL_STK_CC_ALPHA_NOTIFY";
         case RIL_UNSOL_LCEDATA_RECV: return "UNSOL_LCEDATA_RECV";
