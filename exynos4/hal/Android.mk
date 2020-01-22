@@ -28,7 +28,7 @@ ifneq ($(BOARD_USES_PROPRIETARY_LIBFIMC),true)
 common_exynos4_dirs += libfimc
 endif
 
-exynos4210_dirs := $(common_exynos4_dirs) libs5pjpeg libfimg3x
+exynos4210_dirs := $(common_exynos4_dirs) libs5pjpeg libfimg3x libhdmi
 exynos4x12_dirs := $(common_exynos4_dirs) libhwjpeg libfimg4x
 
 ifeq ($(TARGET_SOC),exynos4210)

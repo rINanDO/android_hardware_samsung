@@ -251,7 +251,7 @@ int DDCWrite(unsigned char addr, unsigned char offset, unsigned int size, unsign
     // allocate temporary buffer
     temp = (unsigned char*) malloc((size+1)*sizeof(unsigned char));
     if (!temp) {
-        ALOGE("%s: not enough resources at %s", __FUNCTION__);
+        ALOGE("%s: not enough resources!!!", __FUNCTION__);
         goto exit;
     }
 
@@ -269,7 +269,7 @@ int DDCWrite(unsigned char addr, unsigned char offset, unsigned int size, unsign
     }
 
     // write temp buffer
-    if ((bytes = write(ddc_fd,temp,size+1)) != (size+1)) {
+    if ((bytes = write(ddc_fd,temp,size+1)) != (int)(size+1)) {
         ALOGE("%s: fail to write %d bytes, only write %d bytes",__func__, size, bytes);
         goto exit;
     }

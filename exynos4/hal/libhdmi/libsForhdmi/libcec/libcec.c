@@ -55,7 +55,7 @@ static struct {
 
 static int CECSetLogicalAddr(unsigned int laddr);
 
-#ifdef CEC_DEBUG
+#if CEC_DEBUG
 inline static void CECPrintFrame(unsigned char *buffer, unsigned int size);
 #endif
 
@@ -112,7 +112,7 @@ int CECClose()
 int CECAllocLogicalAddress(int paddr, enum CECDeviceType devtype)
 {
     unsigned char laddr = CEC_LADDR_UNREGISTERED;
-    int i = 0;
+    unsigned int i = 0;
 
     if (fd == -1) {
         ALOGE("open device first!\n");
