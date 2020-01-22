@@ -122,7 +122,7 @@ namespace android {
                     uint32_t dstX, uint32_t dstY, uint32_t hdmiLayer, uint32_t hwcLayer, uint32_t hdmiMode)
                 : pSecHdmi(SecHdmi), mSrcWidth(srcWidth), mSrcHeight(srcHeight), mSrcColorFormat(srcColorFormat),
                 mSrcYAddr(srcYAddr), mSrcCbAddr(srcCbAddr), mSrcCrAddr(srcCrAddr),
-                mDstX(dstX), mDstY(dstY), mHdmiLayer(hdmiLayer), mHwcLayer(hwcLayer), mHdmiMode(hdmiMode) {
+                mDstX(dstX), mDstY(dstY), mHdmiMode(hdmiMode), mHdmiLayer(hdmiLayer), mHwcLayer(hwcLayer) {
             }
 
             virtual bool handler() {

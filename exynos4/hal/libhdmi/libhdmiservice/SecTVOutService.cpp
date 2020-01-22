@@ -271,7 +271,7 @@ namespace android {
                                  uint32_t pPhyYAddr, uint32_t pPhyCbAddr, uint32_t pPhyCrAddr,
                                  uint32_t dstX, uint32_t dstY,
                                  uint32_t hdmiMode,
-                                 uint32_t num_of_hwc_layer)
+                                 uint32_t /* num_of_hwc_layer */)
     {
         Mutex::Autolock _l(mLock);
 
