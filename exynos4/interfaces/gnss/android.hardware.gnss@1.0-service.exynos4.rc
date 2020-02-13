@@ -1,0 +1,4 @@
+service vendor.gnss_service /vendor/bin/hw/android.hardware.gnss@1.0-service.exynos4
+    class hal
+    user root
+    group system gps radio
