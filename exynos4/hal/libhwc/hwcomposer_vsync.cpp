@@ -45,7 +45,12 @@ static void *hwc_vsync_thread(void *data)
     // set up the thread
     char thread_name[64] = HWC_VSYNC_THREAD_NAME;
     prctl(PR_SET_NAME, (unsigned long) &thread_name, 0, 0, 0);
-    androidSetThreadPriority(0, HAL_PRIORITY_URGENT_DISPLAY);
+
+    struct sched_param sched_param = {0};
+    sched_param.sched_priority = 5;
+    if (sched_setscheduler(gettid(), SCHED_FIFO, &sched_param) != 0) {
+        ALOGE("Couldn't set SCHED_FIFO for hwc_vsync");
+    }
 
     memset(buf, 0, sizeof(buf));
 
