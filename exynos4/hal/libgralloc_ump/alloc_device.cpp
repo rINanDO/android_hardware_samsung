@@ -425,7 +425,6 @@ static int gralloc_alloc_framebuffer_locked(alloc_device_t* dev, size_t size, in
         }
     }
 
-    const uint32_t bufferMask = m->bufferMask;
     const uint32_t numBuffers = m->numBuffers;
     const size_t bufferSize = m->finfo.line_length * m->info.yres;
     if (numBuffers == 1) {
@@ -439,28 +438,16 @@ static int gralloc_alloc_framebuffer_locked(alloc_device_t* dev, size_t size, in
         return gralloc_alloc_buffer(dev, bufferSize, newUsage, pHandle, w, h, format, bpp, 0, 0);
     }
 
-    if (bufferMask >= ((1LU<<numBuffers)-1))
-    {
-        // We ran out of buffers.
-        ALOGE("%s Ran out of buffers",__func__); //wjj added
-        return -ENOMEM;
-    }
-
     int current = m->framebuffer->base;
     int vaddr = m->finfo.smem_start - current;
     int l_paddr = m->finfo.smem_start;
 
     ALOGD_IF(debug_level > 0, "%s current=0x%x vaddr=0x%x l_paddr=0x%x before", __func__, current, vaddr, l_paddr);
 
-    /* find a free slot */
-    for (uint32_t i = 0; i < numBuffers; i++) {
-        if ((bufferMask & (1LU<<i)) == 0) {
-            m->bufferMask |= (1LU<<i);
-            break;
-        }
-        current += bufferSize;
-        l_paddr = vaddr + current;
-    }
+    /* use next slot */
+    m->bufferIndex = m->bufferIndex + 1 % numBuffers;
+    current += m->bufferIndex * bufferSize;
+    l_paddr = vaddr + current;
 
     ALOGD_IF(debug_level > 0, "%s current=0x%x vaddr=0x%x l_paddr=0x%x after", __func__, current, vaddr, l_paddr);
 
@@ -680,12 +667,7 @@ static int alloc_device_free(alloc_device_t* dev, buffer_handle_t handle)
 
     if (hnd->flags & private_handle_t::PRIV_FLAGS_FRAMEBUFFER) {
         /* free this buffer */
-        const size_t bufferSize = m->finfo.line_length * m->info.yres;
-        int index = (hnd->base - m->framebuffer->base) / bufferSize;
-
-        m->bufferMask &= ~(1<<index);
         close(hnd->fd);
-
     } else if (hnd->flags & private_handle_t::PRIV_FLAGS_USES_UMP) {
         ALOGD_IF(debug_level > 0, "%s hnd->ump_mem_handle:%08x hnd->ump_id=%d", __func__, hnd->ump_mem_handle, hnd->ump_id);
 

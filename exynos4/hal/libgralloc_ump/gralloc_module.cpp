@@ -948,7 +948,7 @@ struct private_module_t HAL_MODULE_INFO_SYM =
     framebuffer: NULL,
     flags: 0,
     numBuffers: 0,
-    bufferMask: 0,
+    bufferIndex: 0,
     lock: PTHREAD_MUTEX_INITIALIZER,
     currentBuffer: NULL,
     ion_client: -1,

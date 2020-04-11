@@ -360,7 +360,7 @@ int init_frame_buffer_locked(struct private_module_t* module)
             fbSize, intptr_t(vaddr), 0, dup(fd), 0);
 
     module->numBuffers = info.yres_virtual / info.yres;
-    module->bufferMask = 0;
+    module->bufferIndex = 0;
 
     return 0;
 }
