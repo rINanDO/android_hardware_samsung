@@ -55,7 +55,7 @@
 #endif
 
 /* numbers of buffers for page flipping */
-#define NUM_BUFFERS 2   //wjj, only set 2 or 3
+#define NUM_BUFFERS 3   //wjj, only set 2 or 3
 #define WAIT_VSYNC_OPT
 
 #define FBIO_WAITFORVSYNC       _IOW('F', 0x20, __u32)
