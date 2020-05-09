@@ -262,7 +262,6 @@ bool is_offscreen(struct hwc_context_t *ctx, hwc_layer_1_t &layer)
             layer.displayFrame.bottom < 0;
 }
 
-#ifdef SMDK4210
 bool is_overlay_supported(struct hwc_context_t *ctx, hwc_layer_1_t &layer, size_t i)
 {
    if(layer.flags & HWC_SKIP_LAYER  || !layer.handle) {
@@ -324,71 +323,6 @@ bool is_overlay_supported(struct hwc_context_t *ctx, hwc_layer_1_t &layer, size_
 
     return result;
 }
-#else
-bool is_overlay_supported(struct hwc_context_t *ctx, hwc_layer_1_t &layer, size_t i)
-{
-    enum gsc_map_t::mode mode;
-
-    if (layer.flags & HWC_SKIP_LAYER) {
-        ALOGV("\tlayer %u: skipping", i);
-        return false;
-    }
-
-    if (!layer.planeAlpha) {
-        ALOGV("%s: \tlayer %u planeAlpha(%d)", __FUNCTION__, i, layer.planeAlpha);
-        return false;
-    }
-
-    private_handle_t *handle = (private_handle_t *) layer.handle;
-
-    if (!handle) {
-        ALOGV("\tlayer %u: handle is NULL", i);
-        return false;
-    }
-
-    mode = layer_requires_process(layer);
-    ALOGV("%s layer_requires_process() mode=%d", __FUNCTION__, (int) mode);
-
-    switch (mode) {
-    case gsc_map_t::FIMG:
-        if (!supports_fimg(layer)) {
-            ALOGW("\tlayer %u: FIMG required but not supported", i);
-            return false;
-        }
-        break;
-
-    case gsc_map_t::FIMC:
-        if (!supports_fimc(layer)) {
-            ALOGW("\tlayer %u: FIMG required but not supported", i);
-            return false;
-        }
-        break;
-
-    default:
-        if (!format_is_supported(handle->format) || is_transformed(layer) || is_scaled(layer) || !is_contiguous(layer)
-				|| !is_x_aligned(layer)) {
-            ALOGW("\tlayer %u: pixel format %u not supported", i, handle->format);
-            return false;
-        }
-    }
-
-    if (visible_width(ctx, layer) < BURSTLEN_BYTES) {
-        ALOGW("\tlayer %u: visible area is too narrow", i);
-        return false;
-    }
-    if (!blending_is_supported(layer.blending)) {
-        ALOGW("\tlayer %u: blending %d not supported", i, layer.blending);
-        return false;
-    }
-    if (UNLIKELY(is_offscreen(ctx, layer))) {
-        ALOGW("\tlayer %u: off-screen", i);
-        return false;
-    }
-
-    ALOGV("%s: return true", __FUNCTION__);
-    return true;
-}
-#endif
 
 void determineSupportedOverlays(hwc_context_t *ctx, hwc_display_contents_1_t *contents)
 {
