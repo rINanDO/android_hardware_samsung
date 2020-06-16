@@ -445,9 +445,10 @@ static int gralloc_alloc_framebuffer_locked(alloc_device_t* dev, size_t size, in
     ALOGD_IF(debug_level > 0, "%s current=0x%x vaddr=0x%x l_paddr=0x%x before", __func__, current, vaddr, l_paddr);
 
     /* use next slot */
-    m->bufferIndex = m->bufferIndex + 1 % numBuffers;
+    m->bufferIndex = m->bufferIndex % numBuffers;
     current += m->bufferIndex * bufferSize;
     l_paddr = vaddr + current;
+    m->bufferIndex++;
 
     ALOGD_IF(debug_level > 0, "%s current=0x%x vaddr=0x%x l_paddr=0x%x after", __func__, current, vaddr, l_paddr);
 
