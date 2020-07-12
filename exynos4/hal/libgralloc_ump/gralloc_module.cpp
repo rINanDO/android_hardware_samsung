@@ -58,6 +58,7 @@
 static pthread_mutex_t s_map_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t sMapLock = PTHREAD_MUTEX_INITIALIZER;
 
+#define EXYNOS4_ALIGN( value, base ) (((value) + ((base) - 1)) & ~((base) - 1))
 
 static int gSdkVersion = 0;
 static int s_ump_is_open = 0;
@@ -670,9 +671,7 @@ static int gralloc_unregister_buffer(gralloc_module_t const* module, buffer_hand
     return unregister_buffer(hnd);
 }
 
-static int gralloc_lock(gralloc_module_t const* module __unused, buffer_handle_t handle,
-                        int usage, int l __unused, int t __unused, int w __unused,
-                        int h __unused, void** vaddr)
+static int gralloc_lock(buffer_handle_t handle, int usage, int l, int t, int w, int h)
 {
     if (private_handle_t::validate(handle) < 0) {
         ALOGE("Locking invalid buffer, returning error");
@@ -705,23 +704,80 @@ static int gralloc_lock(gralloc_module_t const* module __unused, buffer_handle_t
             ump_cpu_msync_now((ump_handle)hnd->ump_mem_handle, UMP_MSYNC_CLEAN_AND_INVALIDATE, NULL, 0);
     }
 #endif
+    return 0;
+}
 
-    if (usage & GRALLOC_USAGE_YUV_ADDR) {
-        // Create pointer to 3 pointers for YUV addresses
-        void** pAddr = (void **) malloc(3 * sizeof(void *));
-        pAddr[0] = (void*)hnd->base;
-        pAddr[1] = (void*)(hnd->base + hnd->uoffset);
-        pAddr[2] = (void*)(hnd->base + hnd->uoffset + hnd->voffset);
-        *vaddr = pAddr;
-        ALOGD_IF(debug_level > 0, "%s vaddr[0]=%x vaddr[1]=%x vaddr[2]=%x", __func__, vaddr[0], vaddr[1], vaddr[2]);
-    } else {
-        if ((usage & (GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK)) || (usage == 0))
-            *vaddr = (void*)hnd->base;
+int getYUVPlaneInfo(private_handle_t* hnd, struct android_ycbcr* ycbcr)
+{
+    int err = 0;
+    unsigned int ystride, cstride;
+    memset(ycbcr->reserved, 0, sizeof(ycbcr->reserved));
 
-        ALOGD_IF(debug_level > 0, "%s vaddr=%x hnd->base=%x", __func__, *vaddr, hnd->base);
+    // Get the chroma offsets from the handle width/height. We take advantage
+    // of the fact the width _is_ the stride
+    switch (hnd->format) {
+        //Planar
+        case HAL_PIXEL_FORMAT_YV12:
+            ycbcr->cstride = EXYNOS4_ALIGN(hnd->width, 16) / 2;
+            ycbcr->ystride = EXYNOS4_ALIGN(hnd->width, 16);
+            ycbcr->y  = (void*)hnd->base;
+            ycbcr->cr = (void*)(hnd->base + hnd->uoffset);
+            ycbcr->cb = (void*)(hnd->base + hnd->uoffset + hnd->voffset);
+            ycbcr->chroma_step = 1;
+        break;
+        default:
+        ALOGD("%s: Invalid format passed: 0x%x", __FUNCTION__,
+                hnd->format);
+
+        err = -EINVAL;
     }
 
-    return 0;
+    return err;
+}
+
+int gralloc_lock_ycbcr(gralloc_module_t const* module,
+                 buffer_handle_t handle, int usage,
+                 int l, int t, int w, int h,
+                 struct android_ycbcr *ycbcr)
+{
+    private_handle_t* hnd = (private_handle_t*)handle;
+    int err = gralloc_lock(hnd, usage, l, t, w, h);
+    if (!err)
+        err = getYUVPlaneInfo(hnd, ycbcr);
+
+    if (!err)
+        ALOGD_IF(debug_level > 0, "%s: (%dx%d) cstride=%d ystride=%d y=%x cr=%x cb=%x chroma_step=%d",
+            __func__, w, h,
+            ycbcr->cstride, ycbcr->ystride,
+            ycbcr->y, ycbcr->cr, ycbcr->cb,
+            ycbcr->chroma_step);
+
+    return err;
+}
+
+static int gralloc_lock(gralloc_module_t const* module __unused, buffer_handle_t handle,
+                        int usage, int l, int t, int w,
+                        int h, void** vaddr)
+{
+    private_handle_t* hnd = (private_handle_t*)handle;
+    int err = gralloc_lock(hnd, usage, l, t, w, h);
+    if(!err) {
+        if (usage & GRALLOC_USAGE_YUV_ADDR) {
+            // Create pointer to 3 pointers for YUV addresses
+            void** pAddr = (void **) malloc(3 * sizeof(void *));
+            pAddr[0] = (void*)hnd->base;
+            pAddr[1] = (void*)(hnd->base + hnd->uoffset);
+            pAddr[2] = (void*)(hnd->base + hnd->uoffset + hnd->voffset);
+            *vaddr = pAddr;
+            ALOGD_IF(debug_level > 0, "%s vaddr[0]=%x vaddr[1]=%x vaddr[2]=%x", __func__, vaddr[0], vaddr[1], vaddr[2]);
+        } else {
+            if ((usage & (GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK)) || (usage == 0))
+                *vaddr = (void*)hnd->base;
+
+            ALOGD_IF(debug_level > 0, "%s vaddr=%x hnd->base=%x", __func__, *vaddr, hnd->base);
+        }
+    }
+    return err;
 }
 
 static int gralloc_unlock(gralloc_module_t const* module, buffer_handle_t handle)
@@ -797,6 +853,36 @@ static int gralloc_unlock(gralloc_module_t const* module, buffer_handle_t handle
         return 1;
 
     return 0;
+}
+
+static void ycbcr_to_flexible_layout(const struct android_ycbcr* ycbcr,
+        struct android_flex_layout* layout)
+{
+    layout->format = FLEX_FORMAT_YCbCr;
+    layout->num_planes = 3;
+
+    for (uint32_t i = 0; i < layout->num_planes; i++) {
+        layout->planes[i].bits_per_component = 8;
+        layout->planes[i].bits_used = 8;
+        layout->planes[i].h_increment = 1;
+        layout->planes[i].v_increment = 1;
+        layout->planes[i].h_subsampling = 2;
+        layout->planes[i].v_subsampling = 2;
+    }
+
+    layout->planes[0].top_left = (uint8_t*)ycbcr->y;
+    layout->planes[0].component = FLEX_COMPONENT_Y;
+    layout->planes[0].v_increment = (int32_t)ycbcr->ystride;
+
+    layout->planes[1].top_left = (uint8_t*)ycbcr->cb;
+    layout->planes[1].component = FLEX_COMPONENT_Cb;
+    layout->planes[1].h_increment = (int32_t)ycbcr->chroma_step;
+    layout->planes[1].v_increment = (int32_t)ycbcr->cstride;
+
+    layout->planes[2].top_left = (uint8_t*)ycbcr->cr;
+    layout->planes[2].component = FLEX_COMPONENT_Cr;
+    layout->planes[2].h_increment = (int32_t)ycbcr->chroma_step;
+    layout->planes[2].v_increment = (int32_t)ycbcr->cstride;
 }
 
 static int gralloc_perform(struct gralloc_module_t const* module,
@@ -892,6 +978,31 @@ static int gralloc_perform(struct gralloc_module_t const* module,
                 *outStride = hnd->width;
                 ALOGV("%s: (%p) GRALLOC1_ADAPTER_PERFORM_GET_STRIDE %d", __func__,
                     hnd, *outStride);
+            } break;
+        case GRALLOC1_ADAPTER_PERFORM_LOCK_FLEX:
+            {
+                auto hnd =  va_arg(args, private_handle_t*);
+                auto producerUsage = va_arg(args, int);
+                auto consumerUsage = va_arg(args, int);
+                auto left = va_arg(args, int);
+                auto top = va_arg(args, int);
+                auto width = va_arg(args, int);
+                auto height = va_arg(args, int);
+                auto outLayout = va_arg(args, android_flex_layout*);
+                auto acquireFence = va_arg(args, int);
+                (void) acquireFence;
+
+                ALOGV("%s: (%p) GRALLOC1_ADAPTER_PERFORM_LOCK_FLEX", __func__, hnd);
+
+                struct android_ycbcr ycbcr;
+                res = gralloc_lock_ycbcr(module, hnd,
+                        producerUsage | consumerUsage,
+                        left, top, width, height, &ycbcr);
+                if (res != 0) {
+                    return res;
+                }
+
+                ycbcr_to_flexible_layout(&ycbcr, outLayout);
             } break;
         default:
             ALOGE("%s: NOT IMPLEMENTED %d", __func__, operation);
