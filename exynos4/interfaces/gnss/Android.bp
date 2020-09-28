@@ -15,7 +15,6 @@ cc_binary {
         "libhardware",
         "libbinder",
         "libhidlbase",
-        "libhidltransport",
         "android.hardware.gnss@1.0",
     ],
 
