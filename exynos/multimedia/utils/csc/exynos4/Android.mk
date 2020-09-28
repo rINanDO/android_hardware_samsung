@@ -3,7 +3,7 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_COPY_HEADERS_TO := libsecmm
-LOCAL_COPY_HEADERS := \
+LOCAL_EXPORT_C_INCLUDE_DIRS := \
 	color_space_convertor.h \
 	csc_fimc.h
 
