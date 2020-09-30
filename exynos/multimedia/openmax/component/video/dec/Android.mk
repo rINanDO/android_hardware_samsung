@@ -13,7 +13,8 @@ LOCAL_C_INCLUDES := $(SEC_OMX_INC)/khronos \
 	$(SEC_OMX_TOP)/osal \
 	$(SEC_OMX_TOP)/core \
 	$(SEC_OMX_COMPONENT)/common \
-	$(SEC_OMX_COMPONENT)/video/dec
+	$(SEC_OMX_COMPONENT)/video/dec \
+	$(SEC_OMX_TOP)/../utils/csc/exynos4
 
 ifeq ($(BOARD_USE_ANB), true)
 LOCAL_STATIC_LIBRARIES := libsecosal
