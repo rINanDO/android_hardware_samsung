@@ -2,8 +2,8 @@ cc_binary {
     proprietary: true,
     defaults: ["hidl_defaults"],
     relative_install_path: "hw",
-    name: "android.hardware.power@1.0-service.exynos4",
-    init_rc: ["android.hardware.power@1.0-service.exynos4.rc"],
+    name: "android.hardware.power@1.0-service.exynos4210",
+    init_rc: ["android.hardware.power@1.0-service.exynos4210.rc"],
     srcs: [
         "service.cpp",
         "Power.cpp",
