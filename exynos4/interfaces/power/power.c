@@ -35,8 +35,11 @@
 #define DEBUG 0
 #include <log/log.h>
 
+#ifdef EXYNOS4412
+#include "power_4412.h"
+#else
 #include "power.h"
-
+#endif
 
 #define PEGASUSQ_PATH "/sys/devices/system/cpu/cpufreq/pegasusq/"
 #define MINMAX_CPU_PATH "/sys/power/"
@@ -187,8 +190,20 @@ static void set_power_profile(int profile) {
     if (check_governor_pegasusq()) {
         WRITE_PEGASUSQ_PARAM(profile, hotplug_freq_1_1);
         WRITE_PEGASUSQ_PARAM(profile, hotplug_freq_2_0);
+#ifdef EXYNOS4412
+        WRITE_PEGASUSQ_PARAM(profile, hotplug_freq_2_1);
+        WRITE_PEGASUSQ_PARAM(profile, hotplug_freq_3_0);
+        WRITE_PEGASUSQ_PARAM(profile, hotplug_freq_3_1);
+        WRITE_PEGASUSQ_PARAM(profile, hotplug_freq_4_0);
+#endif
         WRITE_PEGASUSQ_PARAM(profile, hotplug_rq_1_1);
         WRITE_PEGASUSQ_PARAM(profile, hotplug_rq_2_0);
+#ifdef EXYNOS4412
+        WRITE_PEGASUSQ_PARAM(profile, hotplug_rq_2_1);
+        WRITE_PEGASUSQ_PARAM(profile, hotplug_rq_3_0);
+        WRITE_PEGASUSQ_PARAM(profile, hotplug_rq_3_1);
+        WRITE_PEGASUSQ_PARAM(profile, hotplug_rq_4_0);
+#endif
         WRITE_MINMAX_CPU(cpufreq_max_limit, profiles[profile].max_freq);
         WRITE_MINMAX_CPU(cpufreq_min_limit, profiles[profile].min_freq);
         WRITE_PEGASUSQ_PARAM(profile, freq_step);
@@ -266,8 +281,22 @@ static void set_power(bool low_power) {
         end_boost();
         WRITE_LOW_POWER_PARAM(current_power_profile, hotplug_freq_1_1);
         WRITE_LOW_POWER_PARAM(current_power_profile, hotplug_freq_2_0);
+#ifdef EXYNOS4412
+        WRITE_LOW_POWER_PARAM(current_power_profile, hotplug_freq_1_1);
+        WRITE_LOW_POWER_PARAM(current_power_profile, hotplug_freq_2_0);
+        WRITE_LOW_POWER_PARAM(current_power_profile, hotplug_freq_2_1);
+        WRITE_LOW_POWER_PARAM(current_power_profile, hotplug_freq_3_0);
+        WRITE_LOW_POWER_PARAM(current_power_profile, hotplug_freq_3_1);
+        WRITE_LOW_POWER_PARAM(current_power_profile, hotplug_freq_4_0);
+#endif
         WRITE_LOW_POWER_PARAM(current_power_profile, hotplug_rq_1_1);
         WRITE_LOW_POWER_PARAM(current_power_profile, hotplug_rq_2_0);
+#ifdef EXYNOS4412
+        WRITE_LOW_POWER_PARAM(current_power_profile, hotplug_rq_2_1);
+        WRITE_LOW_POWER_PARAM(current_power_profile, hotplug_rq_3_0);
+        WRITE_LOW_POWER_PARAM(current_power_profile, hotplug_rq_3_1);
+        WRITE_LOW_POWER_PARAM(current_power_profile, hotplug_rq_4_0);
+#endif
         WRITE_MINMAX_CPU(cpufreq_max_limit, profiles_low_power[current_power_profile].max_freq);
         WRITE_MINMAX_CPU(cpufreq_min_limit, profiles_low_power[current_power_profile].min_freq);
         WRITE_LOW_POWER_PARAM(current_power_profile, freq_step);
@@ -284,8 +313,20 @@ static void set_power(bool low_power) {
     } else {
         WRITE_PEGASUSQ_PARAM(current_power_profile, hotplug_freq_1_1);
         WRITE_PEGASUSQ_PARAM(current_power_profile, hotplug_freq_2_0);
+#ifdef EXYNOS4412
+        WRITE_PEGASUSQ_PARAM(current_power_profile, hotplug_freq_2_1);
+        WRITE_PEGASUSQ_PARAM(current_power_profile, hotplug_freq_3_0);
+        WRITE_PEGASUSQ_PARAM(current_power_profile, hotplug_freq_3_1);
+        WRITE_PEGASUSQ_PARAM(current_power_profile, hotplug_freq_4_0);
+#endif
         WRITE_PEGASUSQ_PARAM(current_power_profile, hotplug_rq_1_1);
         WRITE_PEGASUSQ_PARAM(current_power_profile, hotplug_rq_2_0);
+#ifdef EXYNOS4412
+        WRITE_PEGASUSQ_PARAM(current_power_profile, hotplug_rq_2_1);
+        WRITE_PEGASUSQ_PARAM(current_power_profile, hotplug_rq_3_0);
+        WRITE_PEGASUSQ_PARAM(current_power_profile, hotplug_rq_3_1);
+        WRITE_PEGASUSQ_PARAM(current_power_profile, hotplug_rq_4_0);
+#endif
         WRITE_MINMAX_CPU(cpufreq_max_limit, profiles[current_power_profile].max_freq);
         WRITE_MINMAX_CPU(cpufreq_min_limit, profiles[current_power_profile].min_freq);
         WRITE_PEGASUSQ_PARAM(current_power_profile, freq_step);
