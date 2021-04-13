@@ -33,21 +33,21 @@ enum {
     PROFILE_MAX
 };
 
+typedef struct hotplug_freq {
+    int down;
+    int up;
+} hotplug_freq_values;
+
+typedef struct hotplug_rq {
+    int down;
+    int up;
+} hotplug_rq_values;
+
 typedef struct governor_settings {
     // freq values for core up/down
-    int hotplug_freq_1_1;
-    int hotplug_freq_2_0;
-    int hotplug_freq_2_1;
-    int hotplug_freq_3_0;
-    int hotplug_freq_3_1;
-    int hotplug_freq_4_0;
+    struct hotplug_freq hotplug_freqs[4];
     // rq sizes for up/down
-    int hotplug_rq_1_1;
-    int hotplug_rq_2_0;
-    int hotplug_rq_2_1;
-    int hotplug_rq_3_0;
-    int hotplug_rq_3_1;
-    int hotplug_rq_4_0;
+    struct hotplug_rq hotplug_rqs[4];
     // max/min freqs (-1 for default)
     int max_freq;
     int min_freq;
@@ -79,18 +79,14 @@ typedef struct governor_settings {
 
 static power_profile profiles[PROFILE_MAX] = {
     [PROFILE_POWER_SAVE] = {
-        .hotplug_freq_1_1 = 800000,
-        .hotplug_freq_2_0 = 700000,
-        .hotplug_freq_2_1 = 1000000,
-        .hotplug_freq_3_0 = 900000,
-        .hotplug_freq_3_1 = 1200000,
-        .hotplug_freq_4_0 = 1100000,
-        .hotplug_rq_1_1 = 200,
-        .hotplug_rq_2_0 = 200,
-        .hotplug_rq_2_1 = 300,
-        .hotplug_rq_3_0 = 300,
-        .hotplug_rq_3_1 = 400,
-        .hotplug_rq_4_0 = 400,
+	.hotplug_freqs[0] = {	      -1,   800000 },
+	.hotplug_freqs[1] = {	  700000,  1000000 },
+	.hotplug_freqs[2] = {	  900000,  1200000 },
+	.hotplug_freqs[3] = {	 1100000,       -1 },
+	.hotplug_rqs[0] = {	  -1,	  200 },
+	.hotplug_rqs[1] = {	 200,	  300 },
+	.hotplug_rqs[2] = {	 300,	  400 },
+	.hotplug_rqs[3] = {	 400,	   -1 },
         .max_freq = 800000,
         .min_freq = -1,
         .up_threshold = 80,
@@ -110,18 +106,14 @@ static power_profile profiles[PROFILE_MAX] = {
         .launch_boost_time = 0,
     },
     [PROFILE_BALANCED] = {
-        .hotplug_freq_1_1 = 500000,
-        .hotplug_freq_2_0 = 400000,
-        .hotplug_freq_2_1 = 700000,
-        .hotplug_freq_3_0 = 600000,
-        .hotplug_freq_3_1 = 800000,
-        .hotplug_freq_4_0 = 700000,
-        .hotplug_rq_1_1 = 200,
-        .hotplug_rq_2_0 = 150,
-        .hotplug_rq_2_1 = 300,
-        .hotplug_rq_3_0 = 250,
-        .hotplug_rq_3_1 = 400,
-        .hotplug_rq_4_0 = 350,
+	.hotplug_freqs[0] = {	     -1,  500000 },
+	.hotplug_freqs[1] = {	 400000,  700000 },
+	.hotplug_freqs[2] = {	 600000,  800000 },
+	.hotplug_freqs[3] = {	 700000,      -1 },
+	.hotplug_rqs[0] = {	  -1,	  200 },
+	.hotplug_rqs[1] = {	 150,	  300 },
+	.hotplug_rqs[2] = {	 250,	  400 },
+	.hotplug_rqs[3] = {	 350,	   -1 },
         .min_freq = -1,
         .max_freq = -1,
         .up_threshold = 80,
@@ -141,18 +133,14 @@ static power_profile profiles[PROFILE_MAX] = {
         .launch_boost_time = 2000 * (MS_TO_NS),
     },
     [PROFILE_PERFORMANCE] = {
-        .hotplug_freq_1_1 = 500000,
-        .hotplug_freq_2_0 = 200000,
-        .hotplug_freq_2_1 = 500000,
-        .hotplug_freq_3_0 = 200000,
-        .hotplug_freq_3_1 = 700000,
-        .hotplug_freq_4_0 = 200000,
-        .hotplug_rq_1_1 = 150,
-        .hotplug_rq_2_0 = 100,
-        .hotplug_rq_2_1 = 200,
-        .hotplug_rq_3_0 = 150,
-        .hotplug_rq_3_1 = 250,
-        .hotplug_rq_4_0 = 200,
+	.hotplug_freqs[0] = {	     -1,  500000 },
+	.hotplug_freqs[1] = {	 200000,  500000 },
+	.hotplug_freqs[2] = {	 200000,  700000 },
+	.hotplug_freqs[3] = {	 200000,      -1 },
+	.hotplug_rqs[0] = {	  -1,	  150 },
+	.hotplug_rqs[1] = {	 100,	  200 },
+	.hotplug_rqs[2] = {	 150,	  250 },
+	.hotplug_rqs[3] = {	 200,	   -1 },
         .min_freq = -1,
         .max_freq = -1,
         .freq_step = 37,
@@ -177,18 +165,14 @@ static power_profile profiles[PROFILE_MAX] = {
 // boosting as it (should) only occur while the screen is on
 static power_profile profiles_low_power[PROFILE_MAX] = {
     [PROFILE_POWER_SAVE] = {
-        .hotplug_freq_1_1 = 800000,
-        .hotplug_freq_2_0 = 800000,
-        .hotplug_freq_2_1 = 900000,
-        .hotplug_freq_3_0 = 900000,
-        .hotplug_freq_3_1 = 1200000,
-        .hotplug_freq_4_0 = 1100000,
-        .hotplug_rq_1_1 = 200,
-        .hotplug_rq_2_0 = 200,
-        .hotplug_rq_2_1 = 300,
-        .hotplug_rq_3_0 = 300,
-        .hotplug_rq_3_1 = 400,
-        .hotplug_rq_4_0 = 400,
+	.hotplug_freqs[0] = {	      -1,   800000 },
+	.hotplug_freqs[1] = {	  800000,   900000 },
+	.hotplug_freqs[2] = {	  900000,  1100000 },
+	.hotplug_freqs[3] = {	 1200000,      -1 },
+	.hotplug_rqs[0] = {	  -1,	  200 },
+	.hotplug_rqs[1] = {	 200,	  300 },
+	.hotplug_rqs[2] = {	 300,	  400 },
+	.hotplug_rqs[3] = {	 400,	   -1 },
         .max_freq = 900000,
         .min_freq = -1,
         .up_threshold = 95,
@@ -208,18 +192,14 @@ static power_profile profiles_low_power[PROFILE_MAX] = {
         .launch_boost_time = 0,
     },
     [PROFILE_BALANCED] = {
-        .hotplug_freq_1_1 = 700000,
-        .hotplug_freq_2_0 = 700000,
-        .hotplug_freq_2_1 = 900000,
-        .hotplug_freq_3_0 = 900000,
-        .hotplug_freq_3_1 = 1100000,
-        .hotplug_freq_4_0 = 1100000,
-        .hotplug_rq_1_1 = 150,
-        .hotplug_rq_2_0 = 150,
-        .hotplug_rq_2_1 = 250,
-        .hotplug_rq_3_0 = 250,
-        .hotplug_rq_3_1 = 350,
-        .hotplug_rq_4_0 = 350,
+	.hotplug_freqs[0] = {	      -1,   700000 },
+	.hotplug_freqs[1] = {	  700000,   900000 },
+	.hotplug_freqs[2] = {	  900000,  1100000 },
+	.hotplug_freqs[3] = {	 1100000,      -1 },
+	.hotplug_rqs[0] = {	  -1,	  150 },
+	.hotplug_rqs[1] = {	 150,	  250 },
+	.hotplug_rqs[2] = {	 250,	  350 },
+	.hotplug_rqs[3] = {	 350,	   -1 },
         .min_freq = -1,
         .max_freq = -1,
         .up_threshold = 90,
@@ -239,18 +219,14 @@ static power_profile profiles_low_power[PROFILE_MAX] = {
         .launch_boost_time = 0,
     },
     [PROFILE_PERFORMANCE] = {
-        .hotplug_freq_1_1 = 800000,
-        .hotplug_freq_2_0 = 500000,
-        .hotplug_freq_2_1 = 800000,
-        .hotplug_freq_3_0 = 500000,
-        .hotplug_freq_3_1 = 1000000,
-        .hotplug_freq_4_0 = 700000,
-        .hotplug_rq_1_1 = 150,
-        .hotplug_rq_2_0 = 100,
-        .hotplug_rq_2_1 = 200,
-        .hotplug_rq_3_0 = 150,
-        .hotplug_rq_3_1 = 250,
-        .hotplug_rq_4_0 = 200,
+	.hotplug_freqs[0] = {	     -1,   800000 },
+	.hotplug_freqs[1] = {	 500000,   800000 },
+	.hotplug_freqs[2] = {	 500000,  1000000 },
+	.hotplug_freqs[3] = {	 700000,      -1 },
+	.hotplug_rqs[0] = {	  -1,	  150 },
+	.hotplug_rqs[1] = {	 100,	  200 },
+	.hotplug_rqs[2] = {	 150,	  250 },
+	.hotplug_rqs[3] = {	 200,	   -1 },
         .min_freq = -1,
         .max_freq = -1,
         .freq_step = 37,
