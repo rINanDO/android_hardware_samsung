@@ -296,8 +296,8 @@ static int gralloc_alloc_buffer(alloc_device_t* dev, size_t size, int usage,
     }
 
     ret = -1;
-    if (usage & (GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_HW_TEXTURE)) {
-        ALOGV("%s: Allocating graphicbuffer via ION...", __func__);
+    if (usage & (GRALLOC_USAGE_HW_ION | GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_HW_TEXTURE)) {
+        ALOGD("%s: Allocating graphicbuffer via ION (size: %d)...", __func__, size);
         priv_alloc_flag = priv_alloc_flag | private_handle_t::PRIV_FLAGS_GRAPHICBUFFER;
         ret = gralloc_alloc_ion(dev, size, usage, format, &ion_fd, &ion_paddr, &priv_alloc_flag, &ump_mem_handle);
     }
@@ -305,7 +305,7 @@ static int gralloc_alloc_buffer(alloc_device_t* dev, size_t size, int usage,
     if (ret < 0) {
         // may happen if ion carveout is out of memory, or if the
         // handle is not needed for HWC
-        ALOGV("Falling back to UMP-only allocation...");
+        ALOGD("%s: Falling back to UMP-only allocation (size: %d)...", __func__, size);
         priv_alloc_flag = private_handle_t::PRIV_FLAGS_USES_UMP;
 #ifdef SAMSUNG_EXYNOS_CACHE_UMP
         if ((usage & GRALLOC_USAGE_SW_READ_MASK) == GRALLOC_USAGE_SW_READ_OFTEN) {
