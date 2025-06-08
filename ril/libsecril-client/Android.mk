@@ -14,6 +14,9 @@ LOCAL_SHARED_LIBRARIES := \
     liblog \
     librilutils
 
+LOCAL_C_INCLUDES += \
+    hardware/ril/include
+
 LOCAL_CFLAGS := 
 
 ifneq ($(filter m7450 mdm9x35 ss333 xmm7260,$(BOARD_MODEM_TYPE)),)
@@ -25,6 +28,8 @@ LOCAL_CFLAGS += -DUSES_VND_SECRIL
 endif
 
 LOCAL_MODULE:= libsecril-client
+LOCAL_VENDOR_MODULE := true
+
 LOCAL_VENDOR_MODULE := true
 
 include $(BUILD_SHARED_LIBRARY)
