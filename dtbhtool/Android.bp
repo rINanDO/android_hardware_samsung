@@ -42,6 +42,7 @@ cc_binary_host {
 
 cc_library {
     name: "libdtbimg",
+    defaults: ["samsung_header_path_defaults"],
     host_supported: true,
     srcs: [
         "dtbimg.c",
