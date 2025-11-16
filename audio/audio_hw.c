@@ -3041,6 +3041,11 @@ static int out_get_next_write_timestamp(const struct audio_stream_out *stream,
     return -EINVAL;
 }
 
+static inline int list_is_empty(struct listnode *head)
+{
+	return head->next == head || head->next == NULL;
+}
+
 static int out_get_presentation_position(const struct audio_stream_out *stream,
                                    uint64_t *frames, struct timespec *timestamp)
 {
@@ -3053,7 +3058,7 @@ static int out_get_presentation_position(const struct audio_stream_out *stream,
         ret = out_get_presentation_offload_position(out, frames, timestamp);
     } else {
         /* FIXME: which device to read from? */
-        if (!list_empty(&out->pcm_dev_list)) {
+        if (!list_is_empty(&out->pcm_dev_list)) {
             struct pcm_device *pcm_device;
             struct listnode *node;
             unsigned int avail;
