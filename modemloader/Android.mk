@@ -1,4 +1,4 @@
-# Copyright (C) 2012 The Android Open Source Project
+# Copyright (C) 2015 The CyanogenMod Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-SAM_ROOT := $(call my-dir)
+LOCAL_PATH := $(call my-dir)
 
-# Wifi
-ifeq ($(BOARD_HAVE_SAMSUNG_WIFI),true)
-include $(SAM_ROOT)/macloader/Android.mk
-include $(SAM_ROOT)/wifiloader/Android.mk
-endif
+include $(CLEAR_VARS)
 
-ifeq ($(BOARD_VENDOR),samsung)
-include $(SAM_ROOT)/audio/Android.mk
-include $(SAM_ROOT)/modemloader/Android.mk
-include $(SAM_ROOT)/ril/Android.mk
-endif
+LOCAL_SRC_FILES := modemloader.c
+
+LOCAL_SHARED_LIBRARIES := liblog libcutils
+
+LOCAL_MODULE := modemloader
+LOCAL_VENDOR_MODULE := true
+LOCAL_MODULE_TAGS := optional
+
+include $(BUILD_EXECUTABLE)
