@@ -50,5 +50,9 @@ cc_library {
     static_libs: [
         "libfdt",
     ],
-    local_include_dirs: ["libdtbimg"],
+    include_dirs: select(soong_config_variable("samsungVars", "target_specific_header_path"), {
+            any @ value: [ value ],
+            default: [],
+        }),
+    local_include_dirs: ["libdtbimg"]
 }
