@@ -16,6 +16,10 @@
 
 cc_binary {
     name: "android.hardware.ir@1.0-service.samsung",
+    // android.hardware.ir@1.0 (HIDL) was removed upstream in favor of the AIDL
+    // android.hardware.ir interface, and gts210wifi doesn't ship an IR blaster
+    // or install this service.
+    enabled: false,
     defaults: ["samsung_header_path_defaults"],
     relative_install_path: "hw",
     init_rc: ["android.hardware.ir@1.0-service.samsung.rc"],
