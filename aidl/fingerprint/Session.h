@@ -15,6 +15,7 @@
 #include "LockoutTracker.h"
 
 #define FINGERPRINT_DATA_DIR "/data/vendor/biometrics/fp/User_%d/"
+#define FINGERPRINT_LEGACY_DATA_DIR "/data/biometrics/fp/User_%d/"
 
 using ::aidl::android::hardware::biometrics::common::ICancellationSignal;
 using ::aidl::android::hardware::biometrics::common::OperationContext;
