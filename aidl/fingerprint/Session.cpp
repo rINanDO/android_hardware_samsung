@@ -13,6 +13,7 @@
 
 #include <android-base/logging.h>
 
+#include <algorithm>
 #include <dirent.h>
 #include <endian.h>
 #include <thread>
@@ -126,22 +127,30 @@ ndk::ScopedAStatus Session::enumerateEnrollments() {
             LOG(ERROR) << "ss_fingerprint_enumerate failed: " << error;
     } else {
         std::vector<int> enrollments;
-        char filename[64];
-        snprintf(filename, sizeof(filename), FINGERPRINT_DATA_DIR, mUserId);
 
-        DIR* directory = opendir(filename);
-        if (directory) {
+        // Older libbauthserver.so builds without ss_fingerprint_enumerate store
+        // their templates in the legacy path, whatever set_active_group was given.
+        for (const char* dir : {FINGERPRINT_DATA_DIR, FINGERPRINT_LEGACY_DATA_DIR}) {
+            char filename[64];
+            snprintf(filename, sizeof(filename), dir, mUserId);
+
+            DIR* directory = opendir(filename);
+            if (!directory) {
+                LOG(WARNING) << "Failed to open " << filename;
+                continue;
+            }
+
             struct dirent* entry;
             while ((entry = readdir(directory))) {
                 int uid, fid;
-                if (sscanf(entry->d_name, "User_%d_%dtmpl.dat", &uid, &fid)) {
-                    if (uid == mUserId)
+                if (sscanf(entry->d_name, "User_%d_%dtmpl.dat", &uid, &fid) == 2) {
+                    if (uid == mUserId &&
+                        std::find(enrollments.begin(), enrollments.end(), fid) ==
+                                enrollments.end())
                         enrollments.push_back(fid);
                 }
             }
             closedir(directory);
-        } else {
-            LOG(WARNING) << "Failed to open " << filename;
         }
 
         mCb->onEnrollmentsEnumerated(enrollments);
