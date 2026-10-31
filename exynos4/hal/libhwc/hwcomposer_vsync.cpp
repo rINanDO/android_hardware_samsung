@@ -17,8 +17,6 @@
 #include "hwcomposer.h"
 #include "hwcomposer_vsync.h"
 
-#include <cutils/threads.h>
-
 #include <utils/threads.h>
 
 #include <sys/prctl.h>

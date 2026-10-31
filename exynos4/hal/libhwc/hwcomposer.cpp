@@ -1402,7 +1402,7 @@ static void hwc_dump(struct hwc_composer_device_1* dev, char *buff, int buff_len
     }
 
     ctx->multi_fimg = property_get_int32("persist.sys.hwc.multi_fimg", 0);
-    strlcpy(buff, tmp.string(), buff_len);
+    strlcpy(buff, tmp.c_str(), buff_len);
 }
 
 /*****************************************************************************/
