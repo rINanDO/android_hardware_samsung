@@ -793,7 +793,7 @@ void checkReturnStatus(int32_t slotId, Return<void>& ret, bool isRadioService) {
         // write lock is acquired.
         int counter = isRadioService ? mCounterRadio[slotId] : mCounterOemHook[slotId];
         pthread_rwlock_t *radioServiceRwlockPtr = radio::getRadioServiceRwlock(slotId);
-        int ret = pthread_rwlock_unlock(radioServiceRwlockPtr);
+        [[maybe_unused]] int ret = pthread_rwlock_unlock(radioServiceRwlockPtr);
         assert(ret == 0);
 
         // acquire wrlock
@@ -837,7 +837,7 @@ Return<void> RadioImpl::setResponseFunctions(
     RLOGD("setResponseFunctions");
 
     pthread_rwlock_t *radioServiceRwlockPtr = radio::getRadioServiceRwlock(mSlotId);
-    int ret = pthread_rwlock_wrlock(radioServiceRwlockPtr);
+    [[maybe_unused]] int ret = pthread_rwlock_wrlock(radioServiceRwlockPtr);
     assert(ret == 0);
 
     mRadioResponse = radioResponseParam;
@@ -2964,7 +2964,7 @@ Return<void> OemHookImpl::setResponseFunctions(
 #endif
 
     pthread_rwlock_t *radioServiceRwlockPtr = radio::getRadioServiceRwlock(mSlotId);
-    int ret = pthread_rwlock_wrlock(radioServiceRwlockPtr);
+    [[maybe_unused]] int ret = pthread_rwlock_wrlock(radioServiceRwlockPtr);
     assert(ret == 0);
 
     mOemHookResponse = oemHookResponseParam;
@@ -9155,14 +9155,14 @@ void radio::registerService(RIL_RadioFunctions *callbacks, CommandInfo *commands
     configureRpcThreadpool(1, true /* callerWillJoin */);
     for (int i = 0; i < simCount; i++) {
         pthread_rwlock_t *radioServiceRwlockPtr = getRadioServiceRwlock(i);
-        int ret = pthread_rwlock_wrlock(radioServiceRwlockPtr);
+        [[maybe_unused]] int ret = pthread_rwlock_wrlock(radioServiceRwlockPtr);
         assert(ret == 0);
 
         radioService[i] = new RadioImpl;
         radioService[i]->mSlotId = i;
         RLOGD("registerService: starting android::hardware::radio::V1_1::IRadio %s",
                 serviceNames[i]);
-        android::status_t status = radioService[i]->registerAsService(serviceNames[i]);
+        [[maybe_unused]] android::status_t status = radioService[i]->registerAsService(serviceNames[i]);
 
         if (kOemHookEnabled) {
             oemHookService[i] = new OemHookImpl;
