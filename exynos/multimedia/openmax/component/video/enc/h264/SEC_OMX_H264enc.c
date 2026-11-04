@@ -1102,6 +1102,11 @@ OMX_ERRORTYPE SEC_MFC_H264_Encode_Nonblock(OMX_COMPONENTTYPE *pOMXComponent, SEC
             pInputInfo->CPhyAddr = addrInfo.pAddrC;
             break;
         default:
+            if (pSECPort->bStoreMetaData == OMX_TRUE && pVideoEnc->bPhysInput == OMX_TRUE) {
+                pInputInfo->YPhyAddr = (void *)pVideoEnc->physInputY;
+                pInputInfo->CPhyAddr = (void *)pVideoEnc->physInputC;
+                break;
+            }
 
             pInputInfo->YPhyAddr = pVideoEnc->MFCEncInputBuffer[pVideoEnc->indexInputBuffer].YPhyAddr;
             pInputInfo->CPhyAddr = pVideoEnc->MFCEncInputBuffer[pVideoEnc->indexInputBuffer].CPhyAddr;
@@ -1298,6 +1303,11 @@ OMX_ERRORTYPE SEC_MFC_H264_Encode_Block(OMX_COMPONENTTYPE *pOMXComponent, SEC_OM
         pInputInfo->CPhyAddr = addrInfo.pAddrC;
         break;
     default:
+        if (pSECPort->bStoreMetaData == OMX_TRUE && pVideoEnc->bPhysInput == OMX_TRUE) {
+            pInputInfo->YPhyAddr = (void *)pVideoEnc->physInputY;
+            pInputInfo->CPhyAddr = (void *)pVideoEnc->physInputC;
+            break;
+        }
         pInputInfo->YPhyAddr = pVideoEnc->MFCEncInputBuffer[pVideoEnc->indexInputBuffer].YPhyAddr;
         pInputInfo->CPhyAddr = pVideoEnc->MFCEncInputBuffer[pVideoEnc->indexInputBuffer].CPhyAddr;
         pInputInfo->YVirAddr = pVideoEnc->MFCEncInputBuffer[pVideoEnc->indexInputBuffer].YVirAddr;

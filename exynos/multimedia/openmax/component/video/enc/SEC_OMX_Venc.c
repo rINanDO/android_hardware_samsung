@@ -48,6 +48,7 @@
 
 /* HAL_PIXEL_FORMAT_BGRA_8888 from system/graphics.h */
 #define SEC_HAL_PIXEL_FORMAT_BGRA_8888 5
+#define SEC_METADATA_NATIVE_HANDLE_SOURCE 3 /* kMetadataBufferTypeNativeHandleSource */
 #define SEC_LOG_OFF
 #include "SEC_OSAL_Log.h"
 
@@ -496,6 +497,15 @@ OMX_ERRORTYPE SEC_InputBufferGetQueue(SEC_OMX_BASECOMPONENT *pSECComponent)
             dataBuffer->bufferHeader = (OMX_BUFFERHEADERTYPE *)(message->pCmdData);
             dataBuffer->allocSize = dataBuffer->bufferHeader->nAllocLen;
             dataBuffer->dataLen = dataBuffer->bufferHeader->nFilledLen;
+            /*
+             * OMXNodeInstance fills native handle metadata buffers with
+             * sizeof(VideoNativeMetadata) (12) although it allots
+             * sizeof(VideoNativeHandleMetadata) (8): the metadata is all
+             * there, the length is just wrong.
+             */
+            if (pSECPort->bStoreMetaData == OMX_TRUE &&
+                dataBuffer->dataLen > dataBuffer->allocSize)
+                dataBuffer->dataLen = dataBuffer->allocSize;
             dataBuffer->remainDataLen = dataBuffer->dataLen;
             dataBuffer->usedDataLen = 0; //dataBuffer->bufferHeader->nOffset;
             dataBuffer->dataValid = OMX_TRUE;
@@ -803,7 +813,27 @@ OMX_BOOL SEC_Preprocessor_InputData(OMX_COMPONENTTYPE *pOMXComponent)
                     }
 #ifdef USE_METADATABUFFERTYPE
                     else {
-                        if (pSECPort->portDefinition.format.video.eColorFormat == OMX_COLOR_FormatAndroidOpaque) {
+                        pVideoEnc->bPhysInput = OMX_FALSE;
+
+                        if (inputData->allocSize >= 2 * sizeof(OMX_U32) &&
+                            SEC_OSAL_GetMetaDataType(inputData) == SEC_METADATA_NATIVE_HANDLE_SOURCE) {
+                            /*
+                             * galaxys2: CameraSource frame, whatever colour format
+                             * CameraSource configured (camera HAL native handle with
+                             * the physical addresses of a linear NV12 frame). MFC reads it
+                             * directly; take the addresses now, the buffer header goes
+                             * back to the client before the frame is encoded.
+                             */
+                            OMX_PTR ppBuf[3];
+
+                            if (SEC_OSAL_GetInfoFromMetaData(inputData, ppBuf) == OMX_ErrorNone) {
+                                SEC_OSAL_Memcpy(&pVideoEnc->physInputY, ppBuf[0], sizeof(OMX_U32));
+                                SEC_OSAL_Memcpy(&pVideoEnc->physInputC, ppBuf[1], sizeof(OMX_U32));
+                                pVideoEnc->bPhysInput = OMX_TRUE;
+                            } else {
+                                SEC_OSAL_Log(SEC_LOG_ERROR, "bad camera native handle metadata");
+                            }
+                        } else if (pSECPort->portDefinition.format.video.eColorFormat == OMX_COLOR_FormatAndroidOpaque) {
 
                             OMX_PTR ppBuf[3];
                             OMX_PTR pOutBuffer;
@@ -1772,6 +1802,7 @@ OMX_ERRORTYPE SEC_OMX_VideoEncodeComponentInit(OMX_IN OMX_HANDLETYPE hComponent)
     SEC_OSAL_Memset(pVideoEnc, 0, sizeof(SEC_OMX_VIDEOENC_COMPONENT));
     pVideoEnc->fimcFd = -1;
     pVideoEnc->bFimcFailed = OMX_FALSE;
+    pVideoEnc->bPhysInput = OMX_FALSE;
     pSECComponent->hComponentHandle = (OMX_HANDLETYPE)pVideoEnc;
 
     pSECComponent->bSaveFlagEOS = OMX_FALSE;

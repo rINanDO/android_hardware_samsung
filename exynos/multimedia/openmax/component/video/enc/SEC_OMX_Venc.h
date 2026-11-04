@@ -98,6 +98,10 @@ typedef struct _SEC_OMX_VIDEOENC_COMPONENT
     OMX_U32  indexInputBuffer;
     int      fimcFd; /* FIMC node for BGRA surface input, -1 if closed */
     OMX_BOOL bFimcFailed;
+    /* camera HAL frame in a native handle: encode it in place */
+    OMX_BOOL bPhysInput;
+    OMX_U32  physInputY;
+    OMX_U32  physInputC;
 } SEC_OMX_VIDEOENC_COMPONENT;
 
 #ifdef __cplusplus

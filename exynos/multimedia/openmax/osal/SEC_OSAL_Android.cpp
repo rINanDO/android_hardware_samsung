@@ -562,6 +562,14 @@ EXIT:
     return ret;
 }
 
+OMX_U32 SEC_OSAL_GetMetaDataType(OMX_IN SEC_OMX_DATA *pBuffer)
+{
+    MetadataBufferType type;
+
+    memcpy(&type, (MetadataBufferType *)(pBuffer->dataBuffer), sizeof(type));
+    return (OMX_U32)type;
+}
+
 OMX_ERRORTYPE SEC_OSAL_GetInfoFromMetaData(OMX_IN SEC_OMX_DATA *pBuffer,
                                            OMX_OUT OMX_PTR *ppBuf)
 {
@@ -592,7 +600,24 @@ OMX_ERRORTYPE SEC_OSAL_GetInfoFromMetaData(OMX_IN SEC_OMX_DATA *pBuffer,
     /* MetadataBufferType */
     memcpy(&type, (MetadataBufferType *)(pBuffer->dataBuffer), sizeof(type));
 
-    if (type == kMetadataBufferTypeCameraSource) {
+    ppBuf[0] = ppBuf[1] = NULL;
+
+    if (type == kMetadataBufferTypeNativeHandleSource) {
+        /*
+         * galaxys2 camera HAL: a native handle without fds whose first two
+         * ints are the physical addresses of Y and CbCr. As for
+         * kMetadataBufferTypeCameraSource, return pointers to them.
+         */
+        const VideoNativeHandleMetadata *md = (const VideoNativeHandleMetadata *)pBuffer->dataBuffer;
+        native_handle_t *nh = md->pHandle;
+
+        if (nh == NULL || nh->numInts < 2) {
+            ret = OMX_ErrorBadParameter;
+            goto EXIT;
+        }
+        ppBuf[0] = (OMX_PTR)&nh->data[nh->numFds];
+        ppBuf[1] = (OMX_PTR)&nh->data[nh->numFds + 1];
+    } else if (type == kMetadataBufferTypeCameraSource) {
         /* physical addr. of Y */
         ppBuf[0] = (OMX_PTR)(pBuffer->dataBuffer + sizeof(type));
         /* physical addr. of CbCr */

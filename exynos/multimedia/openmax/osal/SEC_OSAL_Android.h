@@ -76,6 +76,8 @@ OMX_ERRORTYPE SEC_OSAL_GetANBHandleInfo(OMX_IN OMX_U32 handle,
 OMX_ERRORTYPE SEC_OSAL_GetInfoFromMetaData(OMX_IN SEC_OMX_DATA *pBuffer,
                                            OMX_OUT OMX_PTR *pOutBuffer);
 
+OMX_U32 SEC_OSAL_GetMetaDataType(OMX_IN SEC_OMX_DATA *pBuffer);
+
 OMX_ERRORTYPE SEC_OSAL_CheckANB(OMX_IN SEC_OMX_DATA *pBuffer,
                                 OMX_OUT OMX_BOOL *bIsANBEnabled);
 
