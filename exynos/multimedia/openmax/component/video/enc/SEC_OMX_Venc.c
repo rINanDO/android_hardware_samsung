@@ -37,6 +37,7 @@
 #include "SEC_OSAL_Semaphore.h"
 #include "SEC_OSAL_ETC.h"
 #include "color_space_convertor.h"
+#include "SEC_OMX_Venc_Fimc.h"
 
 #ifdef USE_STOREMETADATA
 #include "SEC_OSAL_Android.h"
@@ -44,6 +45,9 @@
 
 #undef  SEC_LOG_TAG
 #define SEC_LOG_TAG    "SEC_VIDEO_ENC"
+
+/* HAL_PIXEL_FORMAT_BGRA_8888 from system/graphics.h */
+#define SEC_HAL_PIXEL_FORMAT_BGRA_8888 5
 #define SEC_LOG_OFF
 #include "SEC_OSAL_Log.h"
 
@@ -803,15 +807,42 @@ OMX_BOOL SEC_Preprocessor_InputData(OMX_COMPONENTTYPE *pOMXComponent)
 
                             OMX_PTR ppBuf[3];
                             OMX_PTR pOutBuffer;
+                            OMX_U32 anbFormat = 0, anbPhys = 0, anbStride = 0;
+                            MFC_ENC_INPUT_BUFFER *pMFCIn =
+                                &pVideoEnc->MFCEncInputBuffer[pVideoEnc->indexInputBuffer];
 
                             SEC_OSAL_GetInfoFromMetaData(inputData, ppBuf);
-                            SEC_OSAL_LockANBHandle((OMX_U32)ppBuf[0], width, height, OMX_COLOR_FormatAndroidOpaque, &pOutBuffer);
+                            SEC_OSAL_GetANBHandleInfo((OMX_U32)ppBuf[0], &anbFormat, &anbPhys, &anbStride);
 
-                            csc_ABGR8888_to_YUV420SP_NEON(pVideoEnc->MFCEncInputBuffer[pVideoEnc->indexInputBuffer].YVirAddr,
-                                                    pVideoEnc->MFCEncInputBuffer[pVideoEnc->indexInputBuffer].CVirAddr,
-                                                    pOutBuffer, width, height);
+                            /*
+                             * galaxys2: BGRA buffers (camera2 legacy shim) are converted
+                             * on FIMC. Anything else keeps the NEON path.
+                             */
+                            if (anbFormat == SEC_HAL_PIXEL_FORMAT_BGRA_8888 &&
+                                pVideoEnc->bFimcFailed == OMX_FALSE &&
+                                SEC_OMX_Venc_FimcBGRAToNV12(&pVideoEnc->fimcFd,
+                                        anbPhys, anbStride, width, height,
+                                        (unsigned int)pMFCIn->YPhyAddr,
+                                        (unsigned int)pMFCIn->CPhyAddr) == 0) {
+                                /* converted by FIMC */
+                            } else {
+                                if (anbFormat == SEC_HAL_PIXEL_FORMAT_BGRA_8888 &&
+                                    pVideoEnc->bFimcFailed == OMX_FALSE) {
+                                    SEC_OSAL_Log(SEC_LOG_ERROR, "FIMC conversion failed, using NEON");
+                                    pVideoEnc->bFimcFailed = OMX_TRUE;
+                                }
 
-                            SEC_OSAL_UnlockANBHandle((OMX_U32)ppBuf[0]);
+                                SEC_OSAL_LockANBHandle((OMX_U32)ppBuf[0], width, height, OMX_COLOR_FormatAndroidOpaque, &pOutBuffer);
+
+                                if (anbFormat == SEC_HAL_PIXEL_FORMAT_BGRA_8888)
+                                    csc_ARGB8888_to_YUV420SP_NEON(pMFCIn->YVirAddr, pMFCIn->CVirAddr,
+                                                            pOutBuffer, width, height);
+                                else
+                                    csc_ABGR8888_to_YUV420SP_NEON(pMFCIn->YVirAddr, pMFCIn->CVirAddr,
+                                                            pOutBuffer, width, height);
+
+                                SEC_OSAL_UnlockANBHandle((OMX_U32)ppBuf[0]);
+                            }
                         }
                     }
 #endif
@@ -1739,6 +1770,8 @@ OMX_ERRORTYPE SEC_OMX_VideoEncodeComponentInit(OMX_IN OMX_HANDLETYPE hComponent)
     }
 
     SEC_OSAL_Memset(pVideoEnc, 0, sizeof(SEC_OMX_VIDEOENC_COMPONENT));
+    pVideoEnc->fimcFd = -1;
+    pVideoEnc->bFimcFailed = OMX_FALSE;
     pSECComponent->hComponentHandle = (OMX_HANDLETYPE)pVideoEnc;
 
     pSECComponent->bSaveFlagEOS = OMX_FALSE;
@@ -1842,6 +1875,8 @@ OMX_ERRORTYPE SEC_OMX_VideoEncodeComponentDeinit(OMX_IN OMX_HANDLETYPE hComponen
     pSECComponent = (SEC_OMX_BASECOMPONENT *)pOMXComponent->pComponentPrivate;
 
     pVideoEnc = (SEC_OMX_VIDEOENC_COMPONENT *)pSECComponent->hComponentHandle;
+    if (pVideoEnc != NULL)
+        SEC_OMX_Venc_FimcClose(&pVideoEnc->fimcFd);
     SEC_OSAL_Free(pVideoEnc);
     pSECComponent->hComponentHandle = pVideoEnc = NULL;
 

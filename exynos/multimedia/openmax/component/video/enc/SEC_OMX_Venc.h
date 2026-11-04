@@ -96,6 +96,8 @@ typedef struct _SEC_OMX_VIDEOENC_COMPONENT
     OMX_BOOL bFirstFrame;
     MFC_ENC_INPUT_BUFFER MFCEncInputBuffer[MFC_INPUT_BUFFER_NUM_MAX];
     OMX_U32  indexInputBuffer;
+    int      fimcFd; /* FIMC node for BGRA surface input, -1 if closed */
+    OMX_BOOL bFimcFailed;
 } SEC_OMX_VIDEOENC_COMPONENT;
 
 #ifdef __cplusplus

@@ -68,6 +68,11 @@ OMX_ERRORTYPE SEC_OSAL_UnlockANBHandle(OMX_IN OMX_U32 pBuffer);
 OMX_ERRORTYPE SEC_OSAL_GetPhysANBHandle(OMX_IN OMX_U32 pBuffer,
                                         OMX_OUT OMX_PTR *paddr);
 
+OMX_ERRORTYPE SEC_OSAL_GetANBHandleInfo(OMX_IN OMX_U32 handle,
+                                       OMX_OUT OMX_U32 *pFormat,
+                                       OMX_OUT OMX_U32 *pPhysAddr,
+                                       OMX_OUT OMX_U32 *pStride);
+
 OMX_ERRORTYPE SEC_OSAL_GetInfoFromMetaData(OMX_IN SEC_OMX_DATA *pBuffer,
                                            OMX_OUT OMX_PTR *pOutBuffer);
 

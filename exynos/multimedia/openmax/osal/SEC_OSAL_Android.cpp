@@ -36,6 +36,7 @@
 #include <media/hardware/HardwareAPI.h>
 #include <hardware/hardware.h>
 #include <media/hardware/MetadataBufferType.h>
+#include "gralloc_priv.h"
 
 #include "SEC_OSAL_Semaphore.h"
 #include "SEC_OMX_Baseport.h"
@@ -227,6 +228,30 @@ EXIT:
     FunctionOut();
 
     return ret;
+}
+
+/*
+ * galaxys2: read what the encoder needs to hand a gralloc buffer to FIMC.
+ * The handle crosses processes with its first sNumInts ints, which include
+ * format, paddr and stride.
+ */
+OMX_ERRORTYPE SEC_OSAL_GetANBHandleInfo(
+    OMX_IN OMX_U32 handle,
+    OMX_OUT OMX_U32 *pFormat,
+    OMX_OUT OMX_U32 *pPhysAddr,
+    OMX_OUT OMX_U32 *pStride)
+{
+    private_handle_t *hnd = private_handle_t::dynamicCast((const native_handle *)handle);
+
+    if (hnd == NULL)
+        return OMX_ErrorBadParameter;
+
+    *pFormat = hnd->format;
+    *pPhysAddr = (hnd->flags & private_handle_t::PRIV_FLAGS_USES_ION) ?
+            (OMX_U32)(hnd->paddr + hnd->offset) : 0;
+    *pStride = hnd->stride;
+
+    return OMX_ErrorNone;
 }
 
 OMX_ERRORTYPE SEC_OSAL_LockANB(

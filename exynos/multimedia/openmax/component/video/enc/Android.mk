@@ -2,7 +2,8 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
-	SEC_OMX_Venc.c
+	SEC_OMX_Venc.c \
+	SEC_OMX_Venc_Fimc.c
 
 LOCAL_MODULE := libSEC_OMX_Venc
 LOCAL_ARM_MODE := arm
