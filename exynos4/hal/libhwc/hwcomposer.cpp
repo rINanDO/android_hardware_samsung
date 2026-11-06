@@ -199,6 +199,9 @@ static bool is_contiguous(const hwc_layer_1_t &layer)
     return false;
 }
 
+/* Let FIMC scale and convert decoder output; debug.hwc.video_overlay=0 disables it */
+static bool g_video_overlay_test = false;
+
 static enum gsc_map_t::mode layer_requires_process(hwc_layer_1_t &layer)
 {
     private_handle_t *handle = private_handle_t::dynamicCast(layer.handle);
@@ -218,7 +221,7 @@ static enum gsc_map_t::mode layer_requires_process(hwc_layer_1_t &layer)
         break;
 
     case gsc_map_t::FIMC:
-        if (is_scaled(layer)) {
+        if (is_scaled(layer) && !g_video_overlay_test) {
             // FIMC _should_ be able to do scaling
             // but it doesn't seem to work well.
             // Disable it for now.
@@ -262,6 +265,67 @@ bool is_offscreen(struct hwc_context_t *ctx, hwc_layer_1_t &layer)
             layer.displayFrame.bottom < 0;
 }
 
+/*
+ * Scan out a status-bar-shaped RGB layer directly on a FIMD window
+ * instead of compositing it with the GPU. debug.hwc.rgb_overlay=0 disables it.
+ * The buffer must be physically contiguous (ION), unscaled, untransformed
+ * and above the bottom layer, since window 0 can't blend.
+ */
+static bool is_rgb_statusbar_overlay(struct hwc_context_t *ctx,
+        hwc_layer_1_t &layer, private_handle_t *hnd, size_t i)
+{
+    if (i == 0 || !hnd->paddr || !(hnd->flags & private_handle_t::PRIV_FLAGS_USES_ION))
+        return false;
+
+    // config_overlay() always programs the window as RGBA_8888
+    if (hnd->format != HAL_PIXEL_FORMAT_RGBA_8888)
+        return false;
+
+    if (is_scaled(layer) || is_transformed(layer))
+        return false;
+
+    if (layer.blending != HWC_BLENDING_NONE &&
+            layer.blending != HWC_BLENDING_PREMULT)
+        return false;
+
+    hwc_rect_t crop = integerizeSourceCrop(layer.sourceCropf);
+    if (crop.left != 0 || crop.top != 0)
+        return false;
+
+    const hwc_rect_t &f = layer.displayFrame;
+    return f.left == 0 && f.top == 0 && f.right == ctx->xres &&
+            f.bottom > 0 && f.bottom <= 100;
+}
+
+/*
+ * Scan out a full-screen bottom RGB layer (usually the foreground
+ * app) directly on FIMD window 0. Window 0 can't blend, so the layer is
+ * shown as opaque. debug.hwc.app_overlay=0 disables it.
+ */
+static bool is_rgb_fullscreen_bottom_overlay(struct hwc_context_t *ctx,
+        hwc_layer_1_t &layer, private_handle_t *hnd, size_t i)
+{
+    if (i != 0 || !hnd->paddr || !(hnd->flags & private_handle_t::PRIV_FLAGS_USES_ION))
+        return false;
+
+    if (hnd->format != HAL_PIXEL_FORMAT_RGBA_8888 &&
+            hnd->format != HAL_PIXEL_FORMAT_RGBX_8888)
+        return false;
+
+    if (is_scaled(layer) || is_transformed(layer))
+        return false;
+
+    if (layer.planeAlpha && layer.planeAlpha < 255)
+        return false;
+
+    hwc_rect_t crop = integerizeSourceCrop(layer.sourceCropf);
+    if (crop.left != 0 || crop.top != 0)
+        return false;
+
+    const hwc_rect_t &f = layer.displayFrame;
+    return f.left == 0 && f.top == 0 && f.right == ctx->xres && f.bottom == ctx->yres;
+}
+
 bool is_overlay_supported(struct hwc_context_t *ctx, hwc_layer_1_t &layer, size_t i)
 {
    if(layer.flags & HWC_SKIP_LAYER  || !layer.handle) {
@@ -273,6 +337,28 @@ bool is_overlay_supported(struct hwc_context_t *ctx, hwc_layer_1_t &layer, size_
 
     bool result = false;
     private_handle_t *prev_handle = (private_handle_t *)(layer.handle);
+
+    if (ctx->app_overlay_test &&
+            is_rgb_fullscreen_bottom_overlay(ctx, layer, prev_handle, i)) {
+        ALOGV("%s: layer %u: RGB full-screen overlay paddr(0x%x)", __func__, i, prev_handle->paddr);
+        return true;
+    }
+
+    if (ctx->rgb_overlay_test &&
+            is_rgb_statusbar_overlay(ctx, layer, prev_handle, i)) {
+        ALOGV("%s: layer %u: RGB status bar overlay paddr(0x%x)", __func__, i, prev_handle->paddr);
+        return true;
+    }
+
+    if (i == 0 && is_yuv_format(prev_handle->format)) {
+        static int last_logged_format = -1;
+        if (prev_handle->format != last_logged_format) {
+            ALOGI("%s: bottom YUV layer format(0x%x) usage(0x%x) flags(0x%x) paddr(0x%x) blending(0x%x)",
+                    __func__, prev_handle->format, prev_handle->usage, prev_handle->flags,
+                    prev_handle->paddr, layer.blending);
+            last_logged_format = prev_handle->format;
+        }
+    }
 
     if (i == 0) {
     /* check here....if we have any resolution constraints */
@@ -296,10 +382,21 @@ bool is_overlay_supported(struct hwc_context_t *ctx, hwc_layer_1_t &layer, size_
         case HAL_PIXEL_FORMAT_CUSTOM_YCbCr_420_SP_TILED:
             result = true;
             break;
+        case HAL_PIXEL_FORMAT_YCbCr_420_SP_TILED:
+            /* SEC OMX decoder output: contiguous ION memory, FIMC reads it */
+            result = ctx->video_overlay_test && prev_handle->paddr &&
+                    !is_transformed(layer);
+            break;
         case HAL_PIXEL_FORMAT_YV12:                 /* YCrCb_420_P */
         case HAL_PIXEL_FORMAT_YCbCr_420_P:
         case HAL_PIXEL_FORMAT_YCrCb_420_SP:
         case HAL_PIXEL_FORMAT_YCbCr_420_SP:
+            if (ctx->video_overlay_test && prev_handle->paddr &&
+                    (prev_handle->flags & private_handle_t::PRIV_FLAGS_USES_ION) &&
+                    !is_transformed(layer)) {
+                result = true;
+                break;
+            }
             if ((prev_handle->usage & GRALLOC_USAGE_HWC_HWOVERLAY) &&
                  (layer.blending == HWC_BLENDING_NONE))
                 result = true;
@@ -632,6 +729,15 @@ void assignWindows(hwc_context_t *ctx, hwc_display_contents_1_t *contents)
 static int prepare_fimd(hwc_context_t *ctx, hwc_display_contents_1_t* contents)
 {
     ctx->force_fb = ctx->force_gpu;
+    /* The overlays are on by default; these properties switch them off.
+     * Re-read them about once a second rather than on every frame. */
+    static unsigned int prop_refresh = 0;
+    if (prop_refresh++ % 60 == 0) {
+        ctx->rgb_overlay_test = property_get_bool("debug.hwc.rgb_overlay", true);
+        ctx->app_overlay_test = property_get_bool("debug.hwc.app_overlay", true);
+        ctx->video_overlay_test = property_get_bool("debug.hwc.video_overlay", true);
+        g_video_overlay_test = ctx->video_overlay_test;
+    }
 
     if (ctx->bypass_count > 0) {
         ctx->force_fb = true;
@@ -1135,6 +1241,11 @@ static int set_fimd(hwc_context_t *ctx, hwc_display_contents_1_t *contents)
                 ctx->win[i].current_buf = (ctx->win[i].current_buf + 1) % NUM_OF_WIN_BUF;
 
                 layer.releaseFenceFd = -1;
+            } else if (ctx->win[i].gsc.mode == gsc_map_t::FIMC) {
+                /* FIMC has finished reading the source; scan out the next
+                 * destination buffer, not the one on screen */
+                layer.releaseFenceFd = dup_fd;
+                ctx->win[i].current_buf = (ctx->win[i].current_buf + 1) % NUM_OF_WIN_BUF;
             } else {
                 layer.releaseFenceFd = dup_fd;
             }
