@@ -256,11 +256,6 @@ gralloc1_error_t Gralloc1On0Adapter::allocate(
         return GRALLOC1_ERROR_NO_RESOURCES;
     }
 
-    mModule->perform(mModule, GRALLOC1_ADAPTER_PERFORM_SET_USAGES,
-            handle,
-            static_cast<int>(descriptor->producerUsage),
-            static_cast<int>(descriptor->consumerUsage));
-
     uint64_t backingStore = 0;
     mModule->perform(mModule, GRALLOC1_ADAPTER_PERFORM_GET_BACKING_STORE,
             handle, &backingStore);
@@ -389,8 +384,8 @@ gralloc1_error_t Gralloc1On0Adapter::retain(buffer_handle_t bufferHandle)
     int width = 0;
     int height = 0;
     int format = HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED;
-    int producerUsage = 0;
-    int consumerUsage = 0;
+    uint64_t producerUsage = 0;
+    uint64_t consumerUsage = 0;
     mModule->perform(mModule, GRALLOC1_ADAPTER_PERFORM_GET_DIMENSIONS,
             bufferHandle, &width, &height);
     mModule->perform(mModule, GRALLOC1_ADAPTER_PERFORM_GET_FORMAT,

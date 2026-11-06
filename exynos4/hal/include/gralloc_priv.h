@@ -144,11 +144,12 @@ struct private_handle_t {
 
     /* Following members are for ION memory only */
     int     ion_client;
-    void   *ion_memory;
 
-    uint64_t backing_store;
-    uint64_t producer_usage;
-    uint64_t consumer_usage;
+    /* sNumInts ends here. The members below are not part of the native handle:
+     * they only exist in the handle returned by alloc, not in a handle that was
+     * cloned or received from another process.
+     */
+    void   *ion_memory;
 
 #ifdef __cplusplus
     static const int sNumInts = 21;
@@ -177,7 +178,8 @@ struct private_handle_t {
     ion_client(0),
     yaddr(0),
     uoffset(0),
-    voffset(0)
+    voffset(0),
+    ion_memory(NULL)
     {
         version = sizeof(native_handle);
         numFds = sNumFds;
@@ -208,7 +210,8 @@ struct private_handle_t {
     ion_client(0),
     yaddr(0),
     uoffset(0),
-    voffset(0)
+    voffset(0),
+    ion_memory(NULL)
     {
         version = sizeof(native_handle);
         numFds = sNumFds;

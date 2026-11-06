@@ -373,8 +373,8 @@ static int gralloc_register_buffer(gralloc_module_t const* module, buffer_handle
 #ifdef USE_PARTIAL_FLUSH
     if (hnd->flags & private_handle_t::PRIV_FLAGS_USES_UMP) {
         ALOGD_IF(debug_partial_flush > 0,
-            "%s: PARTIAL_FLUSH ump_id:%d === BEGIN === ump_mem_handle:%08x flags=%x usage=%x count:%d backingstore:%d",
-            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id), hnd->backing_store);
+            "%s: PARTIAL_FLUSH ump_id:%d === BEGIN === ump_mem_handle:%08x flags=%x usage=%x count:%d",
+            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id));
         if (debug_partial_flush > 0)
             dump_rect();
         private_handle_rect *psRect;
@@ -382,14 +382,14 @@ static int gralloc_register_buffer(gralloc_module_t const* module, buffer_handle
         psRect->handle = (int)hnd->ump_id;
         psRect->stride = (int) (hnd->stride * get_bpp(hnd->format));
         ALOGD_IF(debug_partial_flush > 0,
-            "%s: PARTIAL_FLUSH ump_id:%d === insert_rect_last === ump_mem_handle:%08x flags=%x usage=%x count:%d backingstore:%d",
-            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id), hnd->backing_store);
+            "%s: PARTIAL_FLUSH ump_id:%d === insert_rect_last === ump_mem_handle:%08x flags=%x usage=%x count:%d",
+            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id));
         insert_rect_last(psRect);
         if (debug_partial_flush > 0)
             dump_rect();
         ALOGD_IF(debug_partial_flush > 0,
-            "%s: PARTIAL_FLUSH ump_id:%d === END === ump_mem_handle:%08x flags=%x usage=%x count:%d backingstore:%d",
-            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id), hnd->backing_store);
+            "%s: PARTIAL_FLUSH ump_id:%d === END === ump_mem_handle:%08x flags=%x usage=%x count:%d",
+            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id));
     }
 #endif
 
@@ -428,7 +428,7 @@ sd
         ALOGD_IF(debug_level > 1, "%s: ump_id:%d ump_mem_handle:%08x", __func__, hnd->ump_id, hnd->ump_mem_handle);
 
         hnd->ump_mem_handle = (int)ump_handle_create_from_secure_id(hnd->ump_id);
-        ALOGD_IF(debug_partial_flush > 0, "%s: PARTIAL_FLUSH ump_id:%d ump_mem_handle:%08x flags=%x usage=%x count:%d backing_store:%d", __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id), hnd->backing_store);
+        ALOGD_IF(debug_partial_flush > 0, "%s: PARTIAL_FLUSH ump_id:%d ump_mem_handle:%08x flags=%x usage=%x count:%d", __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id));
 
         ALOGD_IF(debug_level > 0, "%s PRIV_FLAGS_USES_UMP hnd->ump_mem_handle=%d(%x)", __func__, hnd->ump_mem_handle, hnd->ump_mem_handle);
 
@@ -528,22 +528,22 @@ static int unregister_buffer(private_handle_t* hnd) {
 #ifdef USE_PARTIAL_FLUSH
     if (hnd->flags & private_handle_t::PRIV_FLAGS_USES_UMP) {
         ALOGD_IF(debug_partial_flush > 0,
-            "%s: PARTIAL_FLUSH ump_id:%d === BEGIN === ump_mem_handle:%08x flags=%x usage=%x count:%d backingstore:%d",
-            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id), hnd->backing_store);
+            "%s: PARTIAL_FLUSH ump_id:%d === BEGIN === ump_mem_handle:%08x flags=%x usage=%x count:%d",
+            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id));
         if (debug_partial_flush > 0)
             dump_rect();
 
         ALOGD_IF(debug_partial_flush > 0,
-            "%s: PARTIAL_FLUSH ump_id:%d === release_rect === ump_mem_handle:%08x flags=%x usage=%x count:%d backingstore:%d",
-            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id), hnd->backing_store);
+            "%s: PARTIAL_FLUSH ump_id:%d === release_rect === ump_mem_handle:%08x flags=%x usage=%x count:%d",
+            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id));
         if (!release_rect((int)hnd->ump_id))
             ALOGE("%s: PARTIAL_FLUSH ump_id:%d, release error", __func__, (int)hnd->ump_id);
 
         if (debug_partial_flush > 0)
             dump_rect();
         ALOGD_IF(debug_partial_flush > 0,
-            "%s: PARTIAL_FLUSH ump_id:%d === END === ump_mem_handle:%08x flags=%x usage=%x count:%d backingstore:%d",
-            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id), hnd->backing_store);
+            "%s: PARTIAL_FLUSH ump_id:%d === END === ump_mem_handle:%08x flags=%x usage=%x count:%d",
+            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id));
     }
 #endif
     ALOGE_IF(hnd->lockState & private_handle_t::LOCK_STATE_READ_MASK,
@@ -637,10 +637,6 @@ static private_handle_t* clone_private_handle(private_handle_t* hnd) {
     result->uoffset = hnd->uoffset;
     result->voffset = hnd->voffset;
     result->ion_client = hnd->ion_client;
-    result->ion_memory = hnd->ion_memory;
-    result->backing_store = hnd->backing_store;
-    result->producer_usage = hnd->producer_usage;
-    result->consumer_usage = hnd->consumer_usage;
     return result;
 }
 
@@ -902,17 +898,6 @@ static int gralloc_perform(struct gralloc_module_t const* module,
                 ALOGV("%s: GRALLOC1_ADAPTER_PERFORM_GET_REAL_MODULE_API_VERSION_MINOR %d",
                     __func__, *outMinorVersion);
             } break;
-        case GRALLOC1_ADAPTER_PERFORM_SET_USAGES:
-            {
-                auto hnd =  va_arg(args, private_handle_t*);
-                auto producerUsage = va_arg(args, uint64_t);
-                auto consumerUsage = va_arg(args, uint64_t);
-                hnd->producer_usage = producerUsage;
-                hnd->consumer_usage = consumerUsage;
-                ALOGV("%s: (%p) GRALLOC1_ADAPTER_PERFORM_SET_USAGES p:0x%08x c:0x%08x", __func__,
-                    hnd, producerUsage, consumerUsage);
-            } break;
-
         case GRALLOC1_ADAPTER_PERFORM_GET_DIMENSIONS:
             {
                 auto hnd =  va_arg(args, private_handle_t*);
@@ -937,24 +922,25 @@ static int gralloc_perform(struct gralloc_module_t const* module,
             {
                 auto hnd =  va_arg(args, private_handle_t*);
                 auto outUsage = va_arg(args, uint64_t*);
-                *outUsage = hnd->producer_usage;
+                *outUsage = static_cast<uint32_t>(hnd->usage);
                 ALOGV("%s: (%p) GRALLOC1_ADAPTER_PERFORM_GET_PRODUCER_USAGE 0x%08x", __func__,
-                    hnd, hnd->producer_usage);
+                    hnd, hnd->usage);
             } break;
         case GRALLOC1_ADAPTER_PERFORM_GET_CONSUMER_USAGE:
             {
                 auto hnd =  va_arg(args, private_handle_t*);
                 auto outUsage = va_arg(args, uint64_t*);
-                *outUsage = hnd->consumer_usage;
+                *outUsage = static_cast<uint32_t>(hnd->usage);
                 ALOGV("%s: (%p) GRALLOC1_ADAPTER_PERFORM_GET_CONSUMER_USAGE 0x%08x", __func__,
-                    hnd, hnd->consumer_usage);
+                    hnd, hnd->usage);
             } break;
 
         case GRALLOC1_ADAPTER_PERFORM_GET_BACKING_STORE:
             {
                 auto hnd =  va_arg(args, private_handle_t*);
                 auto outBackingStore = va_arg(args, uint64_t*);
-                *outBackingStore = hnd->backing_store;
+                *outBackingStore = (hnd->flags & private_handle_t::PRIV_FLAGS_FRAMEBUFFER) ?
+                    0 : static_cast<uint32_t>(hnd->ump_id);
                 ALOGV("%s: (%p) GRALLOC1_ADAPTER_PERFORM_GET_BACKING_STORE %llu", __func__,
                     hnd, *outBackingStore);
             } break;
