@@ -337,8 +337,8 @@ static int gralloc_alloc_buffer(alloc_device_t* dev, size_t size, int usage,
 #ifdef USE_PARTIAL_FLUSH
                     if (hnd->flags & private_handle_t::PRIV_FLAGS_USES_UMP) {
                         ALOGD_IF(debug_partial_flush > 0,
-                            "%s: PARTIAL_FLUSH ump_id:%d === BEGIN === ump_mem_handle:%08x flags=%x usage=%x count:%d backingstore:%d",
-                            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id), hnd->backing_store);
+                            "%s: PARTIAL_FLUSH ump_id:%d === BEGIN === ump_mem_handle:%08x flags=%x usage=%x count:%d",
+                            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id));
                         if (debug_partial_flush > 0)
                             dump_rect();
 
@@ -347,19 +347,18 @@ static int gralloc_alloc_buffer(alloc_device_t* dev, size_t size, int usage,
                         psRect->handle = (int)hnd->ump_id;
                         psRect->stride = stride_raw;
                         ALOGD_IF(debug_partial_flush > 0,
-                            "%s: PARTIAL_FLUSH ump_id:%d === insert_rect_last === ump_mem_handle:%08x flags=%x usage=%x count:%d backingstore:%d",
-                            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id), hnd->backing_store);
+                            "%s: PARTIAL_FLUSH ump_id:%d === insert_rect_last === ump_mem_handle:%08x flags=%x usage=%x count:%d",
+                            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id));
                         insert_rect_last(psRect);
 
                         if (debug_partial_flush > 0)
                             dump_rect();
                         ALOGD_IF(debug_partial_flush > 0,
-                            "%s: PARTIAL_FLUSH ump_id:%d === END === ump_mem_handle:%08x flags=%x usage=%x count:%d backingstore:%d",
-                            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id), hnd->backing_store);
+                            "%s: PARTIAL_FLUSH ump_id:%d === END === ump_mem_handle:%08x flags=%x usage=%x count:%d",
+                            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id));
                     }
 #endif
 
-                    hnd->backing_store = ump_id;
                     hnd->format = format;
                     hnd->usage = usage;
                     hnd->width = w;
@@ -465,7 +464,6 @@ static int gralloc_alloc_framebuffer_locked(alloc_device_t* dev, size_t size, in
     hnd->width = w;
     hnd->height = h;
     hnd->bpp = bpp;
-    hnd->backing_store = 0;
     hnd->paddr = l_paddr;
     hnd->stride = stride;
 
@@ -674,22 +672,22 @@ static int alloc_device_free(alloc_device_t* dev, buffer_handle_t handle)
 
 #ifdef USE_PARTIAL_FLUSH
         ALOGD_IF(debug_partial_flush > 0,
-            "%s: PARTIAL_FLUSH ump_id:%d === BEGIN === ump_mem_handle:%08x flags=%x usage=%x count:%d backingstore:%d",
-            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id), hnd->backing_store);
+            "%s: PARTIAL_FLUSH ump_id:%d === BEGIN === ump_mem_handle:%08x flags=%x usage=%x count:%d",
+            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id));
         if (debug_partial_flush > 0)
             dump_rect();
 
         ALOGD_IF(debug_partial_flush > 0,
-            "%s: PARTIAL_FLUSH ump_id:%d === release_rect === ump_mem_handle:%08x flags=%x usage=%x count:%d backingstore:%d",
-            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id), hnd->backing_store);
+            "%s: PARTIAL_FLUSH ump_id:%d === release_rect === ump_mem_handle:%08x flags=%x usage=%x count:%d",
+            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id));
         if (!release_rect((int)hnd->ump_id))
             ALOGE("%s: PARTIAL_FLUSH secure id: 0x%d, release error", __func__, (int)hnd->ump_id);
 
         if (debug_partial_flush > 0)
             dump_rect();
         ALOGD_IF(debug_partial_flush > 0,
-            "%s: PARTIAL_FLUSH ump_id:%d === END === ump_mem_handle:%08x flags=%x usage=%x count:%d backingstore:%d",
-            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id), hnd->backing_store);
+            "%s: PARTIAL_FLUSH ump_id:%d === END === ump_mem_handle:%08x flags=%x usage=%x count:%d",
+            __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id));
 #endif
 
         ump_mapped_pointer_release((ump_handle)hnd->ump_mem_handle);
