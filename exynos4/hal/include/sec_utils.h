@@ -120,6 +120,7 @@ inline int HAL_PIXEL_FORMAT_2_V4L2_PIX(int HAL_PIXEL_FORMAT)
         break;
 
     case HAL_PIXEL_FORMAT_CUSTOM_YCbCr_420_SP_TILED:
+    case HAL_PIXEL_FORMAT_YCbCr_420_SP_TILED:
         V4L2_PIX = V4L2_PIX_FMT_NV12T;
         break;
 

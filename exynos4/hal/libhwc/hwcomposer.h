@@ -137,6 +137,9 @@ struct hwc_context_t {
     bool                      force_fb;
     bool                      multi_fimg; // enable multiple fimg layers
     int                       bypass_count;
+    bool                      rgb_overlay_test; // debug.hwc.rgb_overlay
+    bool                      app_overlay_test; // debug.hwc.app_overlay
+    bool                      video_overlay_test; // debug.hwc.video_overlay
 
     struct hwc_win_info_t     win[NUM_HW_WINDOWS];
 
