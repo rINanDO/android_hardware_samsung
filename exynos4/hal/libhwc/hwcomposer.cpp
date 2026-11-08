@@ -975,17 +975,24 @@ static int perform_fimc(hwc_context_t *ctx, const hwc_layer_1_t &layer, struct h
 
     struct private_handle_t *dst_handle = private_handle_t::dynamicCast(win.dst_buf[win.current_buf]);
     uint32_t dst_addr = (uint32_t) dst_handle->paddr;
-    int w, h;
+    int w, h, fbuf_w;
 
+    /* FIMC takes the width of the framebuffer as the pitch of the rows it
+     * writes, and the window as the size of the picture. The FIMD window
+     * scans the buffer out with a pitch of EXYNOS4_ALIGN(w, 16), so the
+     * framebuffer must be that wide, or a picture whose width isn't a
+     * multiple of 16 comes out sheared. */
     if (rotate == 90 || rotate == 270) {
         w = HEIGHT(layer.displayFrame);
         h = EXYNOS4_ALIGN(WIDTH(layer.displayFrame), 16);
+        fbuf_w = w;
     } else {
         w = WIDTH(layer.displayFrame);
         h = EXYNOS4_ALIGN(HEIGHT(layer.displayFrame), 16);
+        fbuf_w = EXYNOS4_ALIGN(w, 16);
     }
 
-    ret = v4l2_s_fbuf(ctx, (void *)dst_addr, w, h, V4L2_PIX_FMT_RGB32);
+    ret = v4l2_s_fbuf(ctx, (void *)dst_addr, fbuf_w, h, V4L2_PIX_FMT_RGB32);
     if (ret < 0) {
         ALOGE("%s: v4l2_s_fbuf(dst_addr(0x%x)) rc=%d", __FUNCTION__, dst_addr, ret);
         return ret;
