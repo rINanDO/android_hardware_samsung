@@ -81,6 +81,18 @@ static void dump_layer(hwc_layer_1_t const* l, const char *function) {
                 l->displayFrame.bottom);
 }
 
+/* The HWC owns the acquire fence of every layer it is given in set(), and
+ * HWC2On1Adapter hands it a new dup() of the fence on every frame, even when
+ * the buffer has not changed. A fence that isn't closed leaks a file
+ * descriptor in surfaceflinger each frame, until it runs out of them. */
+static void close_acquire_fence(hwc_layer_1_t &layer)
+{
+    if (layer.acquireFenceFd >= 0) {
+        close(layer.acquireFenceFd);
+        layer.acquireFenceFd = -1;
+    }
+}
+
 static int dup_or_warn(int fence)
 {
     int dup_fd = dup(fence);
@@ -875,10 +887,6 @@ static int perform_fimg(hwc_context_t *ctx, const hwc_layer_1_t &layer, struct h
         dump_layer(&layer, __FUNCTION__);
     }
 
-    if (layer.acquireFenceFd >= 0) {
-        close(layer.acquireFenceFd);
-    }
-
     return ret;
 }
 
@@ -1013,10 +1021,6 @@ static int perform_fimc(hwc_context_t *ctx, const hwc_layer_1_t &layer, struct h
         return ret;
     }
 
-    if (layer.acquireFenceFd >= 0) {
-        close(layer.acquireFenceFd);
-    }
-
     return w;
 }
 
@@ -1104,13 +1108,12 @@ static int post_fimd(hwc_context_t *ctx, hwc_display_contents_1_t* contents)
             case gsc_map_t::FIMG:
                 ALOGV("%s: layer %d perform FIMG operation", __FUNCTION__, i);
                 err = perform_fimg(ctx, layer, win, HAL_PIXEL_FORMAT_BGRA_8888);
+                close_acquire_fence(layer);
                 if (err < 0) {
                     ALOGE("failed to perform FIMG for layer %u", i);
                     win.gsc.mode = gsc_map_t::NONE;
                     continue;
                 }
-
-                layer.acquireFenceFd = -1;
 
                 if (win.dst_buf[win.current_buf]) {
                     //use geometry of layer.handle and overwrite the rest
@@ -1126,13 +1129,12 @@ static int post_fimd(hwc_context_t *ctx, hwc_display_contents_1_t* contents)
             case gsc_map_t::FIMC:
                 ALOGV("%s: layer %d perform FIMC operation", __FUNCTION__, i);
                 err = perform_fimc(ctx, layer, win);
+                close_acquire_fence(layer);
                 if (err < 0) {
                     ALOGE("failed to perform FIMC for layer %u", i);
                     win.gsc.mode = gsc_map_t::NONE;
                     continue;
                 }
-
-                layer.acquireFenceFd = -1;
 
                 if (win.dst_buf[win.current_buf]) {
                     //use geometry of layer.handle and overwrite the rest
@@ -1253,6 +1255,12 @@ static int set_fimd(hwc_context_t *ctx, hwc_display_contents_1_t *contents)
     }
 
     contents->retireFenceFd = fence;
+
+    /* Close the fences of the layers that were not scanned out from a
+     * window: the framebuffer target when every layer is on an overlay, and
+     * layers left out by a failed or skipped window. */
+    for (size_t i = 0; i < contents->numHwLayers; i++)
+        close_acquire_fence(contents->hwLayers[i]);
 
     return err;
 }
