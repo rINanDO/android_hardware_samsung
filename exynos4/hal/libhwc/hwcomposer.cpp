@@ -1623,6 +1623,14 @@ static int hwc_device_open(const struct hw_module_t* module, const char* name,
             goto err_open_fb;
         }
 
+        /* S3CFB_WIN_CONFIG sets the mode of fb0 to the size of whatever was
+         * last shown in window 0, which can be a single layer such as the
+         * status bar. Restore the panel mode before reading it, or a
+         * composer reopened after surfaceflinger restarts reports e.g. a
+         * 480x35 display. */
+        if (ioctl(dev->fb0_fd, S3CFB_SET_INITIAL_CONFIG) < 0)
+            ALOGE("%s: S3CFB_SET_INITIAL_CONFIG failed: %s", __FUNCTION__, strerror(errno));
+
         struct fb_var_screeninfo lcd_info;
         if (ioctl(dev->fb0_fd, FBIOGET_VSCREENINFO, &lcd_info) < 0) {
             ALOGE("%s: window_get_var_info is failed : %s", __FUNCTION__, strerror(errno));
