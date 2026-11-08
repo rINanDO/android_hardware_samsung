@@ -670,8 +670,11 @@ void determineBandwidthSupport(hwc_context_t *ctx, hwc_display_contents_1_t *con
 #endif
 }
 
-void assignWindows(hwc_context_t *ctx, hwc_display_contents_1_t *contents)
+/* Returns false if the destination buffers of a FIMC or FIMG window could not
+ * be allocated */
+static bool assignWindows(hwc_context_t *ctx, hwc_display_contents_1_t *contents)
 {
+    bool buffers_ok = true;
     unsigned int nextWindow = 0;
     enum gsc_map_t::mode mode;
     bool fimc_used = false;
@@ -719,10 +722,12 @@ void assignWindows(hwc_context_t *ctx, hwc_display_contents_1_t *contents)
                         ctx->win[nextWindow].rect_info.w = WIDTH(layer.displayFrame);
                         ctx->win[nextWindow].rect_info.h = HEIGHT(layer.displayFrame);
 
-                        window_buffer_allocate(ctx, &ctx->win[nextWindow]);
+                        if (window_buffer_allocate(ctx, &ctx->win[nextWindow]) < 0)
+                            buffers_ok = false;
                     } else {
                         if (!ctx->win[nextWindow].dst_buf[ctx->win[nextWindow].current_buf]) {
-                            window_buffer_allocate(ctx, &ctx->win[nextWindow]);
+                            if (window_buffer_allocate(ctx, &ctx->win[nextWindow]) < 0)
+                                buffers_ok = false;
                         }
                     }
 
@@ -736,6 +741,8 @@ void assignWindows(hwc_context_t *ctx, hwc_display_contents_1_t *contents)
             nextWindow++;
         }
     }
+
+    return buffers_ok;
 }
 
 static int prepare_fimd(hwc_context_t *ctx, hwc_display_contents_1_t* contents)
@@ -757,7 +764,19 @@ static int prepare_fimd(hwc_context_t *ctx, hwc_display_contents_1_t* contents)
 
     determineSupportedOverlays(ctx, contents);
     determineBandwidthSupport(ctx, contents);
-    assignWindows(ctx, contents);
+    if (!assignWindows(ctx, contents)) {
+        /* The ION heap is out of contiguous memory, which apps' buffers
+         * also come from. Compose everything on the GPU for this frame,
+         * and keep doing so for a while before trying again. */
+        ALOGW("%s: no memory for overlay buffers, using the GPU for a while", __FUNCTION__);
+        ctx->bypass_count = 120;
+        ctx->force_fb = true;
+        for (size_t i = 0; i < contents->numHwLayers; i++)
+            contents->hwLayers[i].hints &= ~HWC_HINT_CLEAR_FB;
+        determineSupportedOverlays(ctx, contents);
+        determineBandwidthSupport(ctx, contents);
+        assignWindows(ctx, contents);
+    }
 
     if (ctx->fb_needed)
         ctx->fb_window = ctx->first_fb;
@@ -1103,6 +1122,14 @@ static int post_fimd(hwc_context_t *ctx, hwc_display_contents_1_t* contents)
         if (layer_idx != -1) {
             hwc_layer_1_t &layer = contents->hwLayers[layer_idx];
             private_handle_t* hnd = private_handle_t::dynamicCast(layer.handle);
+
+            if ((win.gsc.mode == gsc_map_t::FIMG || win.gsc.mode == gsc_map_t::FIMC) &&
+                    !win.dst_buf[win.current_buf]) {
+                ALOGE("%s: window %u has no destination buffer", __FUNCTION__, window);
+                close_acquire_fence(layer);
+                win.gsc.mode = gsc_map_t::NONE;
+                continue;
+            }
 
             switch(win.gsc.mode) {
             case gsc_map_t::FIMG:
