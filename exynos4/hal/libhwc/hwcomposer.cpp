@@ -1137,6 +1137,7 @@ static int post_fimd(hwc_context_t *ctx, hwc_display_contents_1_t* contents)
             case gsc_map_t::FIMG:
                 ALOGV("%s: layer %d perform FIMG operation", __FUNCTION__, i);
                 err = perform_fimg(ctx, layer, win, HAL_PIXEL_FORMAT_BGRA_8888);
+                layer.acquireFenceFd = -1; // perform_fimg() closed it
                 if (err < 0) {
                     ALOGE("failed to perform FIMG for layer %u", i);
                     win.gsc.mode = gsc_map_t::NONE;
@@ -1252,6 +1253,21 @@ static int set_fimd(hwc_context_t *ctx, hwc_display_contents_1_t *contents)
     if (err) {
         ALOGV("%s about to clear window", __FUNCTION__);
         fence = window_clear(ctx);
+    }
+
+    /* We own the acquire fences of the overlay layers and of the
+     * framebuffer target. The adapter passes a new framebuffer target fence
+     * every frame, also when all layers are on overlays and the target
+     * isn't shown, so close what wasn't consumed or we leak a fence per
+     * frame and surfaceflinger runs out of file descriptors. */
+    for (size_t i = 0; i < contents->numHwLayers; i++) {
+        hwc_layer_1_t &layer = contents->hwLayers[i];
+        if ((layer.compositionType == HWC_OVERLAY ||
+                layer.compositionType == HWC_FRAMEBUFFER_TARGET) &&
+                layer.acquireFenceFd >= 0) {
+            close(layer.acquireFenceFd);
+            layer.acquireFenceFd = -1;
+        }
     }
 
     ctx->bypass_count = max(ctx->bypass_count-1, 0);
