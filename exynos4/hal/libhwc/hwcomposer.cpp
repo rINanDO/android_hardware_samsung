@@ -18,6 +18,7 @@
  * limitations under the License.
  */
 
+#include <stdio.h>
 #include <utils/String8.h>
 
 #include "hwcomposer.h"
@@ -658,9 +659,11 @@ void determineBandwidthSupport(hwc_context_t *ctx, hwc_display_contents_1_t *con
 #endif
 }
 
-void assignWindows(hwc_context_t *ctx, hwc_display_contents_1_t *contents)
+/* Returns false when a FIMC/FIMG destination buffer couldn't be allocated */
+bool assignWindows(hwc_context_t *ctx, hwc_display_contents_1_t *contents)
 {
     unsigned int nextWindow = 0;
+    bool buffers_ok = true;
     enum gsc_map_t::mode mode;
     bool fimc_used = false;
     for (size_t i = 0; i < contents->numHwLayers; i++) {
@@ -714,6 +717,9 @@ void assignWindows(hwc_context_t *ctx, hwc_display_contents_1_t *contents)
                         }
                     }
 
+                    if (!ctx->win[nextWindow].dst_buf[ctx->win[nextWindow].current_buf])
+                        buffers_ok = false;
+
                     break;
 
                 default:
@@ -724,6 +730,8 @@ void assignWindows(hwc_context_t *ctx, hwc_display_contents_1_t *contents)
             nextWindow++;
         }
     }
+
+    return buffers_ok;
 }
 
 static int prepare_fimd(hwc_context_t *ctx, hwc_display_contents_1_t* contents)
@@ -745,7 +753,16 @@ static int prepare_fimd(hwc_context_t *ctx, hwc_display_contents_1_t* contents)
 
     determineSupportedOverlays(ctx, contents);
     determineBandwidthSupport(ctx, contents);
-    assignWindows(ctx, contents);
+    if (!assignWindows(ctx, contents)) {
+        /* The ION heap is full. Compose this frame and the next ~second
+         * on the GPU, then try the overlay buffers again. */
+        ALOGW("%s: no memory for overlay buffers, using the GPU for a while", __FUNCTION__);
+        ctx->bypass_count = 60;
+        ctx->force_fb = true;
+        determineSupportedOverlays(ctx, contents);
+        determineBandwidthSupport(ctx, contents);
+        assignWindows(ctx, contents);
+    }
 
     if (ctx->fb_needed)
         ctx->fb_window = ctx->first_fb;
@@ -882,7 +899,7 @@ static int perform_fimg(hwc_context_t *ctx, const hwc_layer_1_t &layer, struct h
     return ret;
 }
 
-static int perform_fimc(hwc_context_t *ctx, const hwc_layer_1_t &layer, struct hwc_win_info_t &win)
+static int do_perform_fimc(hwc_context_t *ctx, const hwc_layer_1_t &layer, struct hwc_win_info_t &win)
 {
     private_handle_t *src_handle = private_handle_t::dynamicCast(layer.handle);
     int ret = 0;
@@ -947,6 +964,10 @@ static int perform_fimc(hwc_context_t *ctx, const hwc_layer_1_t &layer, struct h
     }
 
     struct private_handle_t *dst_handle = private_handle_t::dynamicCast(win.dst_buf[win.current_buf]);
+    if (!dst_handle || !dst_handle->paddr) {
+        ALOGE("%s: no destination buffer", __FUNCTION__);
+        return -ENOMEM;
+    }
     uint32_t dst_addr = (uint32_t) dst_handle->paddr;
     int w, h;
 
@@ -958,7 +979,10 @@ static int perform_fimc(hwc_context_t *ctx, const hwc_layer_1_t &layer, struct h
         h = EXYNOS4_ALIGN(HEIGHT(layer.displayFrame), 16);
     }
 
-    ret = v4l2_s_fbuf(ctx, (void *)dst_addr, w, h, V4L2_PIX_FMT_RGB32);
+    /* FIMC uses the frame buffer width as its row pitch. Make it the
+     * 16-pixel aligned stride that post_fimd() scans the buffer out with,
+     * and write the picture into a w x h window at its top left. */
+    ret = v4l2_s_fbuf(ctx, (void *)dst_addr, EXYNOS4_ALIGN(w, 16), h, V4L2_PIX_FMT_RGB32);
     if (ret < 0) {
         ALOGE("%s: v4l2_s_fbuf(dst_addr(0x%x)) rc=%d", __FUNCTION__, dst_addr, ret);
         return ret;
@@ -1013,11 +1037,20 @@ static int perform_fimc(hwc_context_t *ctx, const hwc_layer_1_t &layer, struct h
         return ret;
     }
 
+    return w;
+}
+
+static int perform_fimc(hwc_context_t *ctx, hwc_layer_1_t &layer, struct hwc_win_info_t &win)
+{
+    int ret = do_perform_fimc(ctx, layer, win);
+
+    // The acquire fence is ours to close, also when FIMC failed
     if (layer.acquireFenceFd >= 0) {
         close(layer.acquireFenceFd);
+        layer.acquireFenceFd = -1;
     }
 
-    return w;
+    return ret;
 }
 
 static void config_overlay(hwc_context_t *ctx, hwc_layer_1_t &layer, s3c_fb_win_config &cfg)
@@ -1147,12 +1180,11 @@ static int post_fimd(hwc_context_t *ctx, hwc_display_contents_1_t* contents)
                     private_handle_t* dst_hnd = private_handle_t::dynamicCast(win.dst_buf[win.current_buf]);
                     config[window].phys_addr = dst_hnd->paddr;
                     config[window].offset = 0;
-                    config[window].stride = EXYNOS4_ALIGN(config[window].w,16) * 4;
+                    // the row pitch perform_fimc() gave FIMC (err is its width)
+                    config[window].stride = EXYNOS4_ALIGN(err, 16) * 4;
                 }
                 break;
             case gsc_map_t::NONE:
-                config_overlay(ctx, layer, config[window]);
-                config[window].stride = EXYNOS4_ALIGN(config[window].w, 16) * 4;
             default:
                 config_overlay(ctx, layer, config[window]);
             }
@@ -1593,6 +1625,26 @@ static int hwc_device_open(const struct hw_module_t* module, const char* name,
             ALOGE("%s: window_get_var_info is failed : %s", __FUNCTION__, strerror(errno));
             status = -EINVAL;
             goto err_ioctl;
+        }
+
+        /* The kernel sets the mode of fb0 to the size of the last layer
+         * shown in window 0. After a surfaceflinger restart that can be a
+         * video or the status bar, so take the panel size from its mode. */
+        {
+            unsigned int mode_x = 0, mode_y = 0;
+            FILE *modes = fopen("/sys/class/graphics/fb0/modes", "r");
+            if (modes) {
+                if (fscanf(modes, "%*[^:]:%ux%u", &mode_x, &mode_y) != 2)
+                    mode_x = mode_y = 0;
+                fclose(modes);
+            }
+            if (mode_x && mode_y &&
+                    (lcd_info.xres != mode_x || lcd_info.yres != mode_y)) {
+                ALOGW("%s: fb0 is %ux%u, using the panel mode %ux%u", __FUNCTION__,
+                        lcd_info.xres, lcd_info.yres, mode_x, mode_y);
+                lcd_info.xres = mode_x;
+                lcd_info.yres = mode_y;
+            }
         }
 
         refreshRate = 1000000000000LLU /
