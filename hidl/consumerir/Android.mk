@@ -14,6 +14,10 @@
 # limitations under the License.
 #
 
+# android.hardware.ir@1.0 (HIDL) was removed upstream in favor of the AIDL
+# interface, so this service can't be built anymore.
+ifeq (true,false)
+
 LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
@@ -39,3 +43,5 @@ LOCAL_MODULE_OWNER := samsung
 LOCAL_VENDOR_MODULE := true
 
 include $(BUILD_EXECUTABLE)
+
+endif
