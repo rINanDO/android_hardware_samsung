@@ -225,7 +225,7 @@ int gralloc_alloc_fimc1(size_t size, int usage,
 
 static int gralloc_alloc_ion(alloc_device_t *dev, size_t size, int usage,
 							 int format, ion_buffer *ion_fd, ion_phys_addr_t *ion_paddr,
-							 int *priv_alloc_flag, ump_handle *ump_mem_handle) {
+							 int *priv_alloc_flag, ump_handle *ump_mem_handle, bool contig) {
 	unsigned int ion_flags = 0;
 	private_module_t* m;
 
@@ -247,20 +247,29 @@ static int gralloc_alloc_ion(alloc_device_t *dev, size_t size, int usage,
         *priv_alloc_flag |= private_handle_t::PRIV_FLAGS_USES_ION;
     }
 
+    /*
+     * The contiguous carveout is for buffers the composer, FIMC or MFC read
+     * by physical address. Everything else uses the non-contiguous heap: it
+     * is still shared by fd (a UMP secure id alone doesn't keep a buffer
+     * alive while it is passed to another process), and paddr stays 0 so
+     * hwc never scans it out.
+     */
+    ion_flags = contig ? ION_HEAP_EXYNOS_CONTIG_MASK : ION_HEAP_EXYNOS_MASK;
     if (usage & GRALLOC_USAGE_PRIVATE_NONECACHE) {
         *priv_alloc_flag |= private_handle_t::PRIV_FLAGS_NONE_CACHED;
-        ion_flags = ION_EXYNOS_NONCACHE_MASK | ION_HEAP_EXYNOS_CONTIG_MASK;
-    } else {
-        ion_flags = ION_HEAP_EXYNOS_CONTIG_MASK;
+        ion_flags |= ION_EXYNOS_NONCACHE_MASK;
     }
 
     *ion_fd = ion_alloc(m->ion_client, size, 0, ion_flags);
     if (*ion_fd < 0) {
-        ALOGE("%s Failed to ion_alloc", __func__);
+        if (contig)
+            ALOGE("%s Failed to ion_alloc", __func__);
+        else
+            ALOGE("%s Failed to ion_alloc from the non-contiguous heap", __func__);
         return -1;
     }
 
-    *ion_paddr = ion_getphys(m->ion_client, *ion_fd);
+    *ion_paddr = contig ? ion_getphys(m->ion_client, *ion_fd) : 0;
 
 /* TODO: #ifdef SAMSUNG_EXYNOS_CACHE_UMP here...*/
     if (usage & GRALLOC_USAGE_PRIVATE_NONECACHE) {
@@ -295,17 +304,40 @@ static int gralloc_alloc_buffer(alloc_device_t* dev, size_t size, int usage,
         return gralloc_alloc_fimc1(size, usage, pHandle, w, h, format, bpp, stride_raw, stride);
     }
 
+    /*
+     * The ION carveout is small (34 MB) and only buffers that the composer or
+     * FIMC/MFC hardware read by physical address need it. Buffers the CPU reads
+     * often (surfaceflinger screenshots, which include every task snapshot the
+     * launcher keeps for Recents) and GPU-only buffers (hardware bitmaps,
+     * TextureView) use the non-contiguous ION heap; hwc composes such a layer
+     * with the GPU. Scanout buffers use it too when the carveout is full.
+     */
+    bool want_contig = (usage & GRALLOC_USAGE_HW_ION) ||
+            ((usage & (GRALLOC_USAGE_HW_COMPOSER | GRALLOC_USAGE_HW_FB |
+                       GRALLOC_USAGE_HW_VIDEO_ENCODER | GRALLOC_USAGE_HW_CAMERA_MASK)) &&
+             (usage & GRALLOC_USAGE_SW_READ_MASK) != GRALLOC_USAGE_SW_READ_OFTEN);
+    bool want_ion = want_contig ||
+            (usage & (GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_HW_COMPOSER));
+
     ret = -1;
-    if (usage & (GRALLOC_USAGE_HW_ION | GRALLOC_USAGE_HW_RENDER | GRALLOC_USAGE_HW_TEXTURE)) {
+    if (want_contig) {
         ALOGD("%s: Allocating graphicbuffer via ION (size: %d)...", __func__, size);
         priv_alloc_flag = priv_alloc_flag | private_handle_t::PRIV_FLAGS_GRAPHICBUFFER;
-        ret = gralloc_alloc_ion(dev, size, usage, format, &ion_fd, &ion_paddr, &priv_alloc_flag, &ump_mem_handle);
+        ret = gralloc_alloc_ion(dev, size, usage, format, &ion_fd, &ion_paddr, &priv_alloc_flag, &ump_mem_handle, true);
+        if (ret < 0)
+            ALOGD("%s: ION carveout full, using the non-contiguous heap (size: %d)...", __func__, size);
+    }
+
+    if (ret < 0 && want_ion) {
+        priv_alloc_flag = private_handle_t::PRIV_FLAGS_USES_UMP | private_handle_t::PRIV_FLAGS_GRAPHICBUFFER;
+        ret = gralloc_alloc_ion(dev, size, usage, format, &ion_fd, &ion_paddr, &priv_alloc_flag, &ump_mem_handle, false);
     }
 
     if (ret < 0) {
-        // may happen if ion carveout is out of memory, or if the
-        // handle is not needed for HWC
-        ALOGD("%s: Falling back to UMP-only allocation (size: %d)...", __func__, size);
+        // may happen if ion is out of memory, or if the handle is not
+        // needed by the GPU or HWC
+        if (want_ion)
+            ALOGD("%s: Falling back to UMP-only allocation (size: %d)...", __func__, size);
         priv_alloc_flag = private_handle_t::PRIV_FLAGS_USES_UMP;
 #ifdef SAMSUNG_EXYNOS_CACHE_UMP
         if ((usage & GRALLOC_USAGE_SW_READ_MASK) == GRALLOC_USAGE_SW_READ_OFTEN) {
