@@ -4,14 +4,12 @@
 
 #include <hidl/LegacySupport.h>
 
-#include <binder/ProcessState.h>
-
 using android::hardware::gnss::V1_0::IGnss;
 using android::hardware::defaultPassthroughServiceImplementation;
 
 int main() {
-    // The GNSS HAL may communicate to other vendor components via
-    // /dev/vndbinder
-    android::ProcessState::initWithDriver("/dev/vndbinder");
+    // Stay on /dev/binder: the HAL takes its wakelocks through libpower,
+    // which finds ISystemSuspend in servicemanager, and nothing in the
+    // legacy GPS library uses /dev/vndbinder.
     return defaultPassthroughServiceImplementation<IGnss>();
 }
