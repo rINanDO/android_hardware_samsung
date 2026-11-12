@@ -20,6 +20,17 @@
 #include <android/hardware/radio/1.1/IRadioResponse.h>
 #include <android/hardware/radio/1.1/IRadioIndication.h>
 #include <android/hardware/radio/1.1/types.h>
+#include <android/hardware/radio/1.4/IRadio.h>
+#include <android/hardware/radio/1.4/IRadioResponse.h>
+#include <android/hardware/radio/1.4/IRadioIndication.h>
+#include <android/hardware/radio/1.4/types.h>
+
+#include <atomic>
+#include <ctype.h>
+#include <mutex>
+#include <set>
+#include <sstream>
+#include <string>
 
 #include <android/hardware/radio/deprecated/1.0/IOemHook.h>
 
@@ -150,12 +161,20 @@ void convertRilDataCallListToHal(void *response, size_t responseLen,
 
 void convertRilCellInfoListToHal(void *response, size_t responseLen, hidl_vec<CellInfo>& records);
 
-struct RadioImpl : public V1_1::IRadio {
+struct RadioImpl : public V1_4::IRadio {
     int32_t mSlotId;
     sp<IRadioResponse> mRadioResponse;
     sp<IRadioIndication> mRadioIndication;
     sp<V1_1::IRadioResponse> mRadioResponseV1_1;
     sp<V1_1::IRadioIndication> mRadioIndicationV1_1;
+    // Android 15 and later only accept IRadio 1.4 and ignore several 1.0
+    // and 1.2 responses and indications, so these send the 1.2 or 1.4
+    // versions when the client has them.
+    sp<V1_2::IRadioResponse> mRadioResponseV1_2;
+    sp<V1_2::IRadioIndication> mRadioIndicationV1_2;
+    sp<V1_3::IRadioResponse> mRadioResponseV1_3;
+    sp<V1_4::IRadioResponse> mRadioResponseV1_4;
+    sp<V1_4::IRadioIndication> mRadioIndicationV1_4;
 
     Return<void> setResponseFunctions(
             const ::android::sp<IRadioResponse>& radioResponse,
@@ -491,6 +510,53 @@ struct RadioImpl : public V1_1::IRadio {
     Return<void> setCarrierInfoForImsiEncryption(int32_t serial,
             const V1_1::ImsiEncryptionInfo& message);
 
+    // IRadio 1.2
+    Return<void> startNetworkScan_1_2(int32_t serial, const V1_2::NetworkScanRequest& request);
+    Return<void> setIndicationFilter_1_2(int32_t serial,
+            ::android::hardware::hidl_bitfield<V1_2::IndicationFilter> indicationFilter);
+    Return<void> setSignalStrengthReportingCriteria(int32_t serial, int32_t hysteresisMs,
+            int32_t hysteresisDb, const hidl_vec<int32_t>& thresholdsDbm,
+            V1_2::AccessNetwork accessNetwork);
+    Return<void> setLinkCapacityReportingCriteria(int32_t serial, int32_t hysteresisMs,
+            int32_t hysteresisDlKbps, int32_t hysteresisUlKbps,
+            const hidl_vec<int32_t>& thresholdsDownlinkKbps,
+            const hidl_vec<int32_t>& thresholdsUplinkKbps, V1_2::AccessNetwork accessNetwork);
+    Return<void> setupDataCall_1_2(int32_t serial, V1_2::AccessNetwork accessNetwork,
+            const V1_0::DataProfileInfo& dataProfileInfo, bool modemCognitive,
+            bool roamingAllowed, bool isRoaming, V1_2::DataRequestReason reason,
+            const hidl_vec<hidl_string>& addresses, const hidl_vec<hidl_string>& dnses);
+    Return<void> deactivateDataCall_1_2(int32_t serial, int32_t cid,
+            V1_2::DataRequestReason reason);
+
+    // IRadio 1.3
+    Return<void> setSystemSelectionChannels(int32_t serial, bool specifyChannels,
+            const hidl_vec<V1_1::RadioAccessSpecifier>& specifiers);
+    Return<void> enableModem(int32_t serial, bool on);
+    Return<void> getModemStackStatus(int32_t serial);
+
+    // IRadio 1.4
+    Return<void> setupDataCall_1_4(int32_t serial, V1_4::AccessNetwork accessNetwork,
+            const V1_4::DataProfileInfo& dataProfileInfo, bool roamingAllowed,
+            V1_2::DataRequestReason reason, const hidl_vec<hidl_string>& addresses,
+            const hidl_vec<hidl_string>& dnses);
+    Return<void> setInitialAttachApn_1_4(int32_t serial,
+            const V1_4::DataProfileInfo& dataProfileInfo);
+    Return<void> setDataProfile_1_4(int32_t serial,
+            const hidl_vec<V1_4::DataProfileInfo>& profiles);
+    Return<void> emergencyDial(int32_t serial, const V1_0::Dial& dialInfo,
+            ::android::hardware::hidl_bitfield<V1_4::EmergencyServiceCategory> categories,
+            const hidl_vec<hidl_string>& urns, V1_4::EmergencyCallRouting routing,
+            bool hasKnownUserIntentEmergency, bool isTesting);
+    Return<void> startNetworkScan_1_4(int32_t serial, const V1_2::NetworkScanRequest& request);
+    Return<void> getPreferredNetworkTypeBitmap(int32_t serial);
+    Return<void> setPreferredNetworkTypeBitmap(int32_t serial,
+            ::android::hardware::hidl_bitfield<V1_4::RadioAccessFamily> networkTypeBitmap);
+    Return<void> setAllowedCarriers_1_4(int32_t serial,
+            const V1_4::CarrierRestrictionsWithPriority& carriers,
+            V1_4::SimLockMultiSimPolicy multiSimPolicy);
+    Return<void> getAllowedCarriers_1_4(int32_t serial);
+    Return<void> getSignalStrength_1_4(int32_t serial);
+
     void checkReturnStatus(Return<void>& ret);
 };
 
@@ -807,6 +873,11 @@ void checkReturnStatus(int32_t slotId, Return<void>& ret, bool isRadioService) {
                 radioService[slotId]->mRadioIndication = NULL;
                 radioService[slotId]->mRadioResponseV1_1 = NULL;
                 radioService[slotId]->mRadioIndicationV1_1 = NULL;
+                radioService[slotId]->mRadioResponseV1_2 = NULL;
+                radioService[slotId]->mRadioIndicationV1_2 = NULL;
+                radioService[slotId]->mRadioResponseV1_3 = NULL;
+                radioService[slotId]->mRadioResponseV1_4 = NULL;
+                radioService[slotId]->mRadioIndicationV1_4 = NULL;
             } else {
                 oemHookService[slotId]->mOemHookResponse = NULL;
                 oemHookService[slotId]->mOemHookIndication = NULL;
@@ -848,6 +919,14 @@ Return<void> RadioImpl::setResponseFunctions(
         mRadioResponseV1_1 = nullptr;
         mRadioIndicationV1_1 = nullptr;
     }
+    mRadioResponseV1_2 = V1_2::IRadioResponse::castFrom(mRadioResponse).withDefault(nullptr);
+    mRadioIndicationV1_2 = V1_2::IRadioIndication::castFrom(mRadioIndication).withDefault(nullptr);
+    mRadioResponseV1_3 = V1_3::IRadioResponse::castFrom(mRadioResponse).withDefault(nullptr);
+    mRadioResponseV1_4 = V1_4::IRadioResponse::castFrom(mRadioResponse).withDefault(nullptr);
+    mRadioIndicationV1_4 = V1_4::IRadioIndication::castFrom(mRadioIndication).withDefault(nullptr);
+    RLOGD("setResponseFunctions: client has IRadioResponse 1.2 %d 1.3 %d 1.4 %d",
+            mRadioResponseV1_2 != nullptr, mRadioResponseV1_3 != nullptr,
+            mRadioResponseV1_4 != nullptr);
 
     mCounterRadio[mSlotId]++;
 
@@ -1196,6 +1275,60 @@ Return<void> RadioImpl::setupDataCall(int32_t serial, RadioTechnology radioTechn
     return Void();
 }
 
+namespace {
+
+// The legacy RIL doesn't report the ICCID in its card status, but IRadio 1.2+
+// clients take it from there and won't create a subscription without it.
+// Catch the framework's own read of EF_ICCID and report the ICCID from then on.
+const int32_t kEfIccid = 0x2FE2;
+const int32_t kCommandReadBinary = 0xB0;
+
+std::mutex sIccidMutex;
+std::set<int32_t> sIccidReadSerials;
+std::string sIccid;
+
+void rememberIccidRead(int32_t serial) {
+    std::lock_guard<std::mutex> lock(sIccidMutex);
+    sIccidReadSerials.insert(serial);
+}
+
+bool takeIccidRead(int32_t serial) {
+    std::lock_guard<std::mutex> lock(sIccidMutex);
+    return sIccidReadSerials.erase(serial) > 0;
+}
+
+std::string getIccid() {
+    std::lock_guard<std::mutex> lock(sIccidMutex);
+    return sIccid;
+}
+
+void clearIccid() {
+    std::lock_guard<std::mutex> lock(sIccidMutex);
+    sIccid.clear();
+}
+
+// Returns true if the ICCID changed. EF_ICCID holds BCD digits with the
+// nibbles of every byte swapped.
+bool setIccidFromEf(const char *hex) {
+    if (hex == NULL) return false;
+    size_t len = strlen(hex);
+    if (len == 0 || len % 2 != 0) return false;
+    std::string iccid;
+    for (size_t i = 0; i < len; i += 2) {
+        iccid += (char) toupper(hex[i + 1]);
+        iccid += (char) toupper(hex[i]);
+    }
+    for (char c : iccid) {
+        if (!isxdigit(c)) return false;
+    }
+    std::lock_guard<std::mutex> lock(sIccidMutex);
+    if (iccid == sIccid) return false;
+    sIccid = iccid;
+    return true;
+}
+
+}  // namespace
+
 Return<void> RadioImpl::iccIOForApp(int32_t serial, const IccIo& iccIo) {
 #if VDBG
     RLOGD("iccIOForApp: serial %d", serial);
@@ -1208,6 +1341,9 @@ Return<void> RadioImpl::iccIOForApp(int32_t serial, const IccIo& iccIo) {
     RIL_SIM_IO_v6 rilIccIo = {};
     rilIccIo.command = iccIo.command;
     rilIccIo.fileid = iccIo.fileId;
+    if (iccIo.command == kCommandReadBinary && iccIo.fileId == kEfIccid) {
+        rememberIccidRead(serial);
+    }
     if (!copyHidlStringToRil(&rilIccIo.path, iccIo.path, pRI)) {
         return Void();
     }
@@ -3023,6 +3159,475 @@ void populateResponseInfo(RadioResponseInfo& responseInfo, int serial, int respo
     responseInfo.error = (RadioError) e;
 }
 
+/*
+ * IRadio 1.2 - 1.4 on top of the legacy RIL.
+ *
+ * Android 15 and later only talk to IRadio 1.4 and newer, and they ignore
+ * several 1.0 and 1.2 responses and indications. The new requests are mapped
+ * onto the legacy RIL requests, or answered right away when the legacy RIL
+ * has nothing like them. The response functions further down send the 1.2
+ * or 1.4 versions of a response when the client has them.
+ */
+
+namespace {
+
+// Serials of emergencyDial() requests, which go to the RIL as RIL_REQUEST_DIAL
+// but need emergencyDialResponse() instead of dialResponse().
+std::mutex sEmergencyDialMutex;
+std::set<int32_t> sEmergencyDialSerials;
+
+void rememberEmergencyDial(int32_t serial) {
+    std::lock_guard<std::mutex> lock(sEmergencyDialMutex);
+    sEmergencyDialSerials.insert(serial);
+}
+
+bool takeEmergencyDial(int32_t serial) {
+    std::lock_guard<std::mutex> lock(sEmergencyDialMutex);
+    return sEmergencyDialSerials.erase(serial) > 0;
+}
+
+RadioResponseInfo solicitedResponseInfo(int32_t serial, RadioError error) {
+    RadioResponseInfo responseInfo = {};
+    responseInfo.type = RadioResponseType::SOLICITED;
+    responseInfo.serial = serial;
+    responseInfo.error = error;
+    return responseInfo;
+}
+
+const char *pdpProtocolToString(V1_4::PdpProtocolType protocol) {
+    switch (protocol) {
+        case V1_4::PdpProtocolType::IPV6: return "IPV6";
+        case V1_4::PdpProtocolType::IPV4V6: return "IPV4V6";
+        case V1_4::PdpProtocolType::PPP: return "PPP";
+        case V1_4::PdpProtocolType::IP:
+        default:
+            return "IP";
+    }
+}
+
+V1_4::PdpProtocolType pdpProtocolFromString(const hidl_string& type) {
+    std::string t = type;
+    if (t == "IP") return V1_4::PdpProtocolType::IP;
+    if (t == "IPV6") return V1_4::PdpProtocolType::IPV6;
+    if (t == "IPV4V6") return V1_4::PdpProtocolType::IPV4V6;
+    if (t == "PPP") return V1_4::PdpProtocolType::PPP;
+    return V1_4::PdpProtocolType::UNKNOWN;
+}
+
+V1_0::DataProfileInfo convertDataProfileTo1_0(const V1_4::DataProfileInfo& in) {
+    V1_0::DataProfileInfo out = {};
+    out.profileId = in.profileId;
+    out.apn = in.apn;
+    out.protocol = pdpProtocolToString(in.protocol);
+    out.roamingProtocol = pdpProtocolToString(in.roamingProtocol);
+    out.authType = in.authType;
+    out.user = in.user;
+    out.password = in.password;
+    out.type = in.type;
+    out.maxConnsTime = in.maxConnsTime;
+    out.maxConns = in.maxConns;
+    out.waitTime = in.waitTime;
+    out.enabled = in.enabled;
+    out.supportedApnTypesBitmap = in.supportedApnTypesBitmap;
+    out.bearerBitmap = in.bearerBitmap;
+    out.mtu = in.mtu;
+    out.mvnoType = MvnoType::NONE;
+    out.mvnoMatchData = "";
+    return out;
+}
+
+RadioTechnology radioTechnologyFromAccessNetwork(int32_t accessNetwork) {
+    switch ((V1_4::AccessNetwork) accessNetwork) {
+        case V1_4::AccessNetwork::GERAN: return RadioTechnology::EDGE;
+        case V1_4::AccessNetwork::EUTRAN: return RadioTechnology::LTE;
+        case V1_4::AccessNetwork::CDMA2000: return RadioTechnology::ONE_X_RTT;
+        case V1_4::AccessNetwork::UTRAN:
+        default:
+            return RadioTechnology::UMTS;
+    }
+}
+
+hidl_vec<hidl_string> splitSpaceSeparated(const hidl_string& in) {
+    std::vector<hidl_string> out;
+    std::istringstream stream(std::string(in.c_str()));
+    std::string item;
+    while (stream >> item) out.push_back(item);
+    return out;
+}
+
+V1_4::SetupDataCallResult convertDataCallTo1_4(const SetupDataCallResult& in) {
+    V1_4::SetupDataCallResult out = {};
+    out.cause = (V1_4::DataCallFailCause) in.status;
+    out.suggestedRetryTime = in.suggestedRetryTime;
+    out.cid = in.cid;
+    out.active = (V1_4::DataConnActiveStatus) in.active;
+    out.type = pdpProtocolFromString(in.type);
+    out.ifname = in.ifname;
+    out.addresses = splitSpaceSeparated(in.addresses);
+    out.dnses = splitSpaceSeparated(in.dnses);
+    out.gateways = splitSpaceSeparated(in.gateways);
+    out.pcscf = splitSpaceSeparated(in.pcscf);
+    out.mtu = in.mtu;
+    return out;
+}
+
+hidl_vec<V1_4::SetupDataCallResult> convertDataCallListTo1_4(
+        const hidl_vec<SetupDataCallResult>& in) {
+    hidl_vec<V1_4::SetupDataCallResult> out;
+    out.resize(in.size());
+    for (size_t i = 0; i < in.size(); i++) out[i] = convertDataCallTo1_4(in[i]);
+    return out;
+}
+
+V1_4::CardStatus convertCardStatusTo1_4(const CardStatus& in) {
+    V1_4::CardStatus out = {};
+    out.base.base = in;
+    out.base.physicalSlotId = 0;
+    if (in.cardState == CardState::PRESENT) {
+        out.base.iccid = getIccid();
+    } else {
+        // A new card may be inserted next.
+        clearIccid();
+    }
+    return out;
+}
+
+hidl_vec<V1_2::Call> convertCallsTo1_2(const hidl_vec<Call>& in) {
+    hidl_vec<V1_2::Call> out;
+    out.resize(in.size());
+    for (size_t i = 0; i < in.size(); i++) {
+        out[i].base = in[i];
+        out[i].audioQuality = V1_2::AudioQuality::UNSPECIFIED;
+    }
+    return out;
+}
+
+V1_4::SignalStrength convertSignalStrengthTo1_4(const SignalStrength& in) {
+    V1_4::SignalStrength out = {};
+    out.gsm = in.gw;
+    out.cdma = in.cdma;
+    out.evdo = in.evdo;
+    out.lte = in.lte;
+    // The legacy RIL reports GSM and WCDMA together in gw.
+    out.tdscdma.signalStrength = INT_MAX;
+    out.tdscdma.bitErrorRate = INT_MAX;
+    out.tdscdma.rscp = INT_MAX;
+    out.wcdma.base.signalStrength = 99;
+    out.wcdma.base.bitErrorRate = 99;
+    out.wcdma.rscp = 255;
+    out.wcdma.ecno = 255;
+    out.nr.ssRsrp = INT_MAX;
+    out.nr.ssRsrq = INT_MAX;
+    out.nr.ssSinr = INT_MAX;
+    out.nr.csiRsrp = INT_MAX;
+    out.nr.csiRsrq = INT_MAX;
+    out.nr.csiSinr = INT_MAX;
+    return out;
+}
+
+V1_2::CellIdentity convertCellIdentityTo1_2(const CellIdentity& in) {
+    V1_2::CellIdentity out = {};
+    out.cellInfoType = in.cellInfoType;
+    out.cellIdentityGsm.resize(in.cellIdentityGsm.size());
+    for (size_t i = 0; i < in.cellIdentityGsm.size(); i++) {
+        out.cellIdentityGsm[i].base = in.cellIdentityGsm[i];
+    }
+    out.cellIdentityWcdma.resize(in.cellIdentityWcdma.size());
+    for (size_t i = 0; i < in.cellIdentityWcdma.size(); i++) {
+        out.cellIdentityWcdma[i].base = in.cellIdentityWcdma[i];
+    }
+    out.cellIdentityCdma.resize(in.cellIdentityCdma.size());
+    for (size_t i = 0; i < in.cellIdentityCdma.size(); i++) {
+        out.cellIdentityCdma[i].base = in.cellIdentityCdma[i];
+    }
+    out.cellIdentityLte.resize(in.cellIdentityLte.size());
+    for (size_t i = 0; i < in.cellIdentityLte.size(); i++) {
+        out.cellIdentityLte[i].base = in.cellIdentityLte[i];
+        out.cellIdentityLte[i].bandwidth = INT_MAX;
+    }
+    out.cellIdentityTdscdma.resize(in.cellIdentityTdscdma.size());
+    for (size_t i = 0; i < in.cellIdentityTdscdma.size(); i++) {
+        out.cellIdentityTdscdma[i].base = in.cellIdentityTdscdma[i];
+        out.cellIdentityTdscdma[i].uarfcn = INT_MAX;
+    }
+    return out;
+}
+
+V1_2::VoiceRegStateResult convertVoiceRegTo1_2(const VoiceRegStateResult& in) {
+    V1_2::VoiceRegStateResult out = {};
+    out.regState = in.regState;
+    out.rat = in.rat;
+    out.cssSupported = in.cssSupported;
+    out.roamingIndicator = in.roamingIndicator;
+    out.systemIsInPrl = in.systemIsInPrl;
+    out.defaultRoamingIndicator = in.defaultRoamingIndicator;
+    out.reasonForDenial = in.reasonForDenial;
+    out.cellIdentity = convertCellIdentityTo1_2(in.cellIdentity);
+    return out;
+}
+
+V1_4::DataRegStateResult convertDataRegTo1_4(const DataRegStateResult& in) {
+    V1_4::DataRegStateResult out = {};
+    out.base.regState = in.regState;
+    out.base.rat = in.rat;
+    out.base.reasonDataDenied = in.reasonDataDenied;
+    out.base.maxDataCalls = in.maxDataCalls;
+    out.base.cellIdentity = convertCellIdentityTo1_2(in.cellIdentity);
+    return out;
+}
+
+hidl_vec<V1_4::CellInfo> convertCellInfoListTo1_4(const hidl_vec<CellInfo>& in) {
+    std::vector<V1_4::CellInfo> out;
+    for (const CellInfo& cell : in) {
+        V1_4::CellInfo info = {};
+        info.isRegistered = cell.registered;
+        info.connectionStatus = V1_2::CellConnectionStatus::NONE;
+        if (cell.cellInfoType == CellInfoType::GSM && cell.gsm.size() > 0) {
+            V1_2::CellInfoGsm gsm = {};
+            gsm.cellIdentityGsm.base = cell.gsm[0].cellIdentityGsm;
+            gsm.signalStrengthGsm = cell.gsm[0].signalStrengthGsm;
+            info.info.gsm(gsm);
+        } else if (cell.cellInfoType == CellInfoType::WCDMA && cell.wcdma.size() > 0) {
+            V1_2::CellInfoWcdma wcdma = {};
+            wcdma.cellIdentityWcdma.base = cell.wcdma[0].cellIdentityWcdma;
+            wcdma.signalStrengthWcdma.base = cell.wcdma[0].signalStrengthWcdma;
+            wcdma.signalStrengthWcdma.rscp = 255;
+            wcdma.signalStrengthWcdma.ecno = 255;
+            info.info.wcdma(wcdma);
+        } else if (cell.cellInfoType == CellInfoType::LTE && cell.lte.size() > 0) {
+            V1_4::CellInfoLte lte = {};
+            lte.base.cellIdentityLte.base = cell.lte[0].cellIdentityLte;
+            lte.base.cellIdentityLte.bandwidth = INT_MAX;
+            lte.base.signalStrengthLte = cell.lte[0].signalStrengthLte;
+            info.info.lte(lte);
+        } else if (cell.cellInfoType == CellInfoType::CDMA && cell.cdma.size() > 0) {
+            V1_2::CellInfoCdma cdma = {};
+            cdma.cellIdentityCdma.base = cell.cdma[0].cellIdentityCdma;
+            cdma.signalStrengthCdma = cell.cdma[0].signalStrengthCdma;
+            cdma.signalStrengthEvdo = cell.cdma[0].signalStrengthEvdo;
+            info.info.cdma(cdma);
+        } else {
+            continue;
+        }
+        out.push_back(info);
+    }
+    return out;
+}
+
+// Only GSM and WCDMA matter to the legacy modems this libril drives.
+const uint32_t kRafGsm = (uint32_t) V1_0::RadioAccessFamily::GSM
+        | (uint32_t) V1_0::RadioAccessFamily::GPRS
+        | (uint32_t) V1_0::RadioAccessFamily::EDGE;
+const uint32_t kRafWcdma = (uint32_t) V1_0::RadioAccessFamily::UMTS
+        | (uint32_t) V1_0::RadioAccessFamily::HSDPA
+        | (uint32_t) V1_0::RadioAccessFamily::HSUPA
+        | (uint32_t) V1_0::RadioAccessFamily::HSPA
+        | (uint32_t) V1_0::RadioAccessFamily::HSPAP;
+const uint32_t kRafLte = (uint32_t) V1_0::RadioAccessFamily::LTE
+        | (uint32_t) V1_0::RadioAccessFamily::LTE_CA;
+
+// The modems on the devices of this branch have no LTE, and Android asks for
+// LTE and NR by default, so those bits are dropped.
+int networkTypeFromRaf(uint32_t raf) {
+    bool gsm = raf & kRafGsm, wcdma = raf & kRafWcdma;
+    if (gsm && !wcdma) return (int) PreferredNetworkType::GSM_ONLY;
+    if (wcdma && !gsm) return (int) PreferredNetworkType::WCDMA;
+    return (int) PreferredNetworkType::GSM_WCDMA;
+}
+
+uint32_t rafFromNetworkType(int type) {
+    switch ((PreferredNetworkType) type) {
+        case PreferredNetworkType::GSM_ONLY: return kRafGsm;
+        case PreferredNetworkType::WCDMA: return kRafWcdma;
+        case PreferredNetworkType::LTE_GSM_WCDMA: return kRafLte | kRafGsm | kRafWcdma;
+        case PreferredNetworkType::LTE_ONLY: return kRafLte;
+        case PreferredNetworkType::LTE_WCDMA: return kRafLte | kRafWcdma;
+        case PreferredNetworkType::GSM_WCDMA:
+        case PreferredNetworkType::GSM_WCDMA_AUTO:
+        default:
+            return kRafGsm | kRafWcdma;
+    }
+}
+
+}  // namespace
+
+Return<void> RadioImpl::startNetworkScan_1_2(int32_t serial,
+        const V1_2::NetworkScanRequest& /* request */) {
+    RLOGD("startNetworkScan_1_2: not supported");
+    if (mRadioResponseV1_4 != NULL) {
+        Return<void> ret = mRadioResponseV1_4->startNetworkScanResponse_1_4(
+                solicitedResponseInfo(serial, RadioError::REQUEST_NOT_SUPPORTED));
+        checkReturnStatus(ret);
+    }
+    return Void();
+}
+
+Return<void> RadioImpl::setIndicationFilter_1_2(int32_t serial,
+        ::android::hardware::hidl_bitfield<V1_2::IndicationFilter> indicationFilter) {
+    // The 1.2 link capacity and physical channel config bits mean nothing to
+    // the legacy RIL.
+    return setIndicationFilter(serial, indicationFilter
+            & ((int32_t) IndicationFilter::SIGNAL_STRENGTH
+                | (int32_t) IndicationFilter::FULL_NETWORK_STATE
+                | (int32_t) IndicationFilter::DATA_CALL_DORMANCY_CHANGED));
+}
+
+Return<void> RadioImpl::setSignalStrengthReportingCriteria(int32_t serial,
+        int32_t /* hysteresisMs */, int32_t /* hysteresisDb */,
+        const hidl_vec<int32_t>& /* thresholdsDbm */, V1_2::AccessNetwork /* accessNetwork */) {
+    // The legacy RIL reports every change in signal strength. The framework
+    // sends one request per access network with the same serial and only
+    // expects one response.
+    static std::atomic<int32_t> lastSerial(-1);
+    if (lastSerial.exchange(serial) == serial) {
+        return Void();
+    }
+    if (mRadioResponseV1_2 != NULL) {
+        Return<void> ret = mRadioResponseV1_2->setSignalStrengthReportingCriteriaResponse(
+                solicitedResponseInfo(serial, RadioError::NONE));
+        checkReturnStatus(ret);
+    }
+    return Void();
+}
+
+Return<void> RadioImpl::setLinkCapacityReportingCriteria(int32_t serial,
+        int32_t /* hysteresisMs */, int32_t /* hysteresisDlKbps */,
+        int32_t /* hysteresisUlKbps */, const hidl_vec<int32_t>& /* thresholdsDownlinkKbps */,
+        const hidl_vec<int32_t>& /* thresholdsUplinkKbps */,
+        V1_2::AccessNetwork /* accessNetwork */) {
+    if (mRadioResponseV1_2 != NULL) {
+        Return<void> ret = mRadioResponseV1_2->setLinkCapacityReportingCriteriaResponse(
+                solicitedResponseInfo(serial, RadioError::REQUEST_NOT_SUPPORTED));
+        checkReturnStatus(ret);
+    }
+    return Void();
+}
+
+Return<void> RadioImpl::setupDataCall_1_2(int32_t serial, V1_2::AccessNetwork accessNetwork,
+        const V1_0::DataProfileInfo& dataProfileInfo, bool modemCognitive,
+        bool roamingAllowed, bool isRoaming, V1_2::DataRequestReason /* reason */,
+        const hidl_vec<hidl_string>& /* addresses */, const hidl_vec<hidl_string>& /* dnses */) {
+    return setupDataCall(serial, radioTechnologyFromAccessNetwork((int32_t) accessNetwork),
+            dataProfileInfo, modemCognitive, roamingAllowed, isRoaming);
+}
+
+Return<void> RadioImpl::deactivateDataCall_1_2(int32_t serial, int32_t cid,
+        V1_2::DataRequestReason reason) {
+    return deactivateDataCall(serial, cid, reason == V1_2::DataRequestReason::SHUTDOWN);
+}
+
+Return<void> RadioImpl::setSystemSelectionChannels(int32_t serial, bool /* specifyChannels */,
+        const hidl_vec<V1_1::RadioAccessSpecifier>& /* specifiers */) {
+    // The modem picks its own channels.
+    if (mRadioResponseV1_3 != NULL) {
+        Return<void> ret = mRadioResponseV1_3->setSystemSelectionChannelsResponse(
+                solicitedResponseInfo(serial, RadioError::NONE));
+        checkReturnStatus(ret);
+    }
+    return Void();
+}
+
+Return<void> RadioImpl::enableModem(int32_t serial, bool on) {
+    // There is a single modem stack and it is always enabled; the radio is
+    // switched with setRadioPower().
+    RLOGD("enableModem: %d", on);
+    if (mRadioResponseV1_3 != NULL) {
+        Return<void> ret = mRadioResponseV1_3->enableModemResponse(
+                solicitedResponseInfo(serial, on ? RadioError::NONE
+                        : RadioError::REQUEST_NOT_SUPPORTED));
+        checkReturnStatus(ret);
+    }
+    return Void();
+}
+
+Return<void> RadioImpl::getModemStackStatus(int32_t serial) {
+    if (mRadioResponseV1_3 != NULL) {
+        Return<void> ret = mRadioResponseV1_3->getModemStackStatusResponse(
+                solicitedResponseInfo(serial, RadioError::NONE), true);
+        checkReturnStatus(ret);
+    }
+    return Void();
+}
+
+Return<void> RadioImpl::setupDataCall_1_4(int32_t serial, V1_4::AccessNetwork accessNetwork,
+        const V1_4::DataProfileInfo& dataProfileInfo, bool roamingAllowed,
+        V1_2::DataRequestReason /* reason */, const hidl_vec<hidl_string>& /* addresses */,
+        const hidl_vec<hidl_string>& /* dnses */) {
+    // 1.4 no longer says whether the device is roaming: the framework puts
+    // the protocol to use into both fields.
+    return setupDataCall(serial, radioTechnologyFromAccessNetwork((int32_t) accessNetwork),
+            convertDataProfileTo1_0(dataProfileInfo), dataProfileInfo.persistent,
+            roamingAllowed, false);
+}
+
+Return<void> RadioImpl::setInitialAttachApn_1_4(int32_t serial,
+        const V1_4::DataProfileInfo& dataProfileInfo) {
+    return setInitialAttachApn(serial, convertDataProfileTo1_0(dataProfileInfo),
+            dataProfileInfo.persistent, false);
+}
+
+Return<void> RadioImpl::setDataProfile_1_4(int32_t serial,
+        const hidl_vec<V1_4::DataProfileInfo>& profiles) {
+    hidl_vec<V1_0::DataProfileInfo> legacy;
+    legacy.resize(profiles.size());
+    for (size_t i = 0; i < profiles.size(); i++) {
+        legacy[i] = convertDataProfileTo1_0(profiles[i]);
+    }
+    return setDataProfile(serial, legacy, false);
+}
+
+Return<void> RadioImpl::emergencyDial(int32_t serial, const V1_0::Dial& dialInfo,
+        ::android::hardware::hidl_bitfield<V1_4::EmergencyServiceCategory> /* categories */,
+        const hidl_vec<hidl_string>& /* urns */, V1_4::EmergencyCallRouting /* routing */,
+        bool /* hasKnownUserIntentEmergency */, bool /* isTesting */) {
+    // The legacy modem recognises emergency numbers itself.
+    rememberEmergencyDial(serial);
+    return dial(serial, dialInfo);
+}
+
+Return<void> RadioImpl::startNetworkScan_1_4(int32_t serial,
+        const V1_2::NetworkScanRequest& request) {
+    return startNetworkScan_1_2(serial, request);
+}
+
+Return<void> RadioImpl::getPreferredNetworkTypeBitmap(int32_t serial) {
+    return getPreferredNetworkType(serial);
+}
+
+Return<void> RadioImpl::setPreferredNetworkTypeBitmap(int32_t serial,
+        ::android::hardware::hidl_bitfield<V1_4::RadioAccessFamily> networkTypeBitmap) {
+    int type = networkTypeFromRaf(networkTypeBitmap);
+    RLOGD("setPreferredNetworkTypeBitmap: 0x%x -> network type %d", networkTypeBitmap, type);
+    return setPreferredNetworkType(serial, (PreferredNetworkType) type);
+}
+
+Return<void> RadioImpl::setAllowedCarriers_1_4(int32_t serial,
+        const V1_4::CarrierRestrictionsWithPriority& /* carriers */,
+        V1_4::SimLockMultiSimPolicy /* multiSimPolicy */) {
+    if (mRadioResponseV1_4 != NULL) {
+        Return<void> ret = mRadioResponseV1_4->setAllowedCarriersResponse_1_4(
+                solicitedResponseInfo(serial, RadioError::REQUEST_NOT_SUPPORTED));
+        checkReturnStatus(ret);
+    }
+    return Void();
+}
+
+Return<void> RadioImpl::getAllowedCarriers_1_4(int32_t serial) {
+    if (mRadioResponseV1_4 != NULL) {
+        V1_4::CarrierRestrictionsWithPriority carriers = {};
+        carriers.allowedCarriersPrioritized = true;
+        Return<void> ret = mRadioResponseV1_4->getAllowedCarriersResponse_1_4(
+                solicitedResponseInfo(serial, RadioError::REQUEST_NOT_SUPPORTED), carriers,
+                V1_4::SimLockMultiSimPolicy::NO_MULTISIM_POLICY);
+        checkReturnStatus(ret);
+    }
+    return Void();
+}
+
+Return<void> RadioImpl::getSignalStrength_1_4(int32_t serial) {
+    return getSignalStrength(serial);
+}
+
 int responseIntOrEmpty(RadioResponseInfo& responseInfo, int serial, int responseType, RIL_Errno e,
                void *response, size_t responseLen) {
     populateResponseInfo(responseInfo, serial, responseType, e);
@@ -3123,8 +3728,10 @@ int radio::getIccCardStatusResponse(int slotId,
             if (e == RIL_E_SUCCESS) responseInfo.error = RadioError::INVALID_RESPONSE;
         }
 
-        Return<void> retStatus = radioService[slotId]->mRadioResponse->
-                getIccCardStatusResponse(responseInfo, cardStatus);
+        Return<void> retStatus = radioService[slotId]->mRadioResponseV1_4 != NULL
+                ? radioService[slotId]->mRadioResponseV1_4->getIccCardStatusResponse_1_4(responseInfo,
+                        convertCardStatusTo1_4(cardStatus))
+                : radioService[slotId]->mRadioResponse->getIccCardStatusResponse(responseInfo, cardStatus);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("getIccCardStatusResponse: radioService[%d]->mRadioResponse == NULL", slotId);
@@ -3329,8 +3936,10 @@ int radio::getCurrentCallsResponse(int slotId,
             }
         }
 
-        Return<void> retStatus = radioService[slotId]->mRadioResponse->
-                getCurrentCallsResponse(responseInfo, calls);
+        Return<void> retStatus = radioService[slotId]->mRadioResponseV1_2 != NULL
+                ? radioService[slotId]->mRadioResponseV1_2->getCurrentCallsResponse_1_2(responseInfo,
+                        convertCallsTo1_2(calls))
+                : radioService[slotId]->mRadioResponse->getCurrentCallsResponse(responseInfo, calls);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("getCurrentCallsResponse: radioService[%d]->mRadioResponse == NULL", slotId);
@@ -3349,7 +3958,9 @@ int radio::dialResponse(int slotId,
     if (radioService[slotId]->mRadioResponse != NULL) {
         RadioResponseInfo responseInfo = {};
         populateResponseInfo(responseInfo, serial, responseType, e);
-        Return<void> retStatus = radioService[slotId]->mRadioResponse->dialResponse(responseInfo);
+        Return<void> retStatus = takeEmergencyDial(serial) && radioService[slotId]->mRadioResponseV1_4 != NULL
+                ? radioService[slotId]->mRadioResponseV1_4->emergencyDialResponse(responseInfo)
+                : radioService[slotId]->mRadioResponse->dialResponse(responseInfo);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("dialResponse: radioService[%d]->mRadioResponse == NULL", slotId);
@@ -3566,8 +4177,10 @@ int radio::getSignalStrengthResponse(int slotId,
             convertRilSignalStrengthToHal(response, responseLen, signalStrength);
         }
 
-        Return<void> retStatus = radioService[slotId]->mRadioResponse->getSignalStrengthResponse(
-                responseInfo, signalStrength);
+        Return<void> retStatus = radioService[slotId]->mRadioResponseV1_4 != NULL
+                ? radioService[slotId]->mRadioResponseV1_4->getSignalStrengthResponse_1_4(responseInfo,
+                        convertSignalStrengthTo1_4(signalStrength))
+                : radioService[slotId]->mRadioResponse->getSignalStrengthResponse(responseInfo, signalStrength);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("getSignalStrengthResponse: radioService[%d]->mRadioResponse == NULL",
@@ -3970,9 +4583,11 @@ int radio::getVoiceRegistrationStateResponse(int slotId,
             }
         }
 
-        Return<void> retStatus =
-                radioService[slotId]->mRadioResponse->getVoiceRegistrationStateResponse(
-                responseInfo, voiceRegResponse);
+        Return<void> retStatus = radioService[slotId]->mRadioResponseV1_2 != NULL
+                ? radioService[slotId]->mRadioResponseV1_2->getVoiceRegistrationStateResponse_1_2(
+                        responseInfo, convertVoiceRegTo1_2(voiceRegResponse))
+                : radioService[slotId]->mRadioResponse->getVoiceRegistrationStateResponse(
+                        responseInfo, voiceRegResponse);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("getVoiceRegistrationStateResponse: radioService[%d]->mRadioResponse == NULL",
@@ -4030,9 +4645,11 @@ int radio::getDataRegistrationStateResponse(int slotId,
             }
         }
 
-        Return<void> retStatus =
-                radioService[slotId]->mRadioResponse->getDataRegistrationStateResponse(responseInfo,
-                dataRegResponse);
+        Return<void> retStatus = radioService[slotId]->mRadioResponseV1_4 != NULL
+                ? radioService[slotId]->mRadioResponseV1_4->getDataRegistrationStateResponse_1_4(
+                        responseInfo, convertDataRegTo1_4(dataRegResponse))
+                : radioService[slotId]->mRadioResponse->getDataRegistrationStateResponse(responseInfo,
+                        dataRegResponse);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("getDataRegistrationStateResponse: radioService[%d]->mRadioResponse == NULL",
@@ -4200,6 +4817,10 @@ int radio::setupDataCallResponse(int slotId,
                 if (e == RIL_E_SUCCESS) responseInfo.error = RadioError::INVALID_RESPONSE;
             }
             result.status = DataCallFailCause::ERROR_UNSPECIFIED;
+            // 0 asks the framework to retry at once, which it then does in a
+            // tight loop for as long as the setup keeps failing. -1 lets it
+            // use its own retry and back-off rules.
+            result.suggestedRetryTime = -1;
             result.type = hidl_string();
             result.ifname = hidl_string();
             result.addresses = hidl_string();
@@ -4214,8 +4835,10 @@ int radio::setupDataCallResponse(int slotId,
             convertRilDataCallToHal((RIL_Data_Call_Response_v6 *) response, result);
         }
 
-        Return<void> retStatus = radioService[slotId]->mRadioResponse->setupDataCallResponse(
-                responseInfo, result);
+        Return<void> retStatus = radioService[slotId]->mRadioResponseV1_4 != NULL
+                ? radioService[slotId]->mRadioResponseV1_4->setupDataCallResponse_1_4(responseInfo,
+                        convertDataCallTo1_4(result))
+                : radioService[slotId]->mRadioResponse->setupDataCallResponse(responseInfo, result);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("setupDataCallResponse: radioService[%d]->mRadioResponse == NULL", slotId);
@@ -4253,10 +4876,23 @@ int radio::iccIOForAppResponse(int slotId,
         RadioResponseInfo responseInfo = {};
         IccIoResult result = responseIccIo(responseInfo, serial, responseType, e, response,
                 responseLen);
+        bool iccidChanged = false;
+        if (takeIccidRead(serial) && responseInfo.error == RadioError::NONE
+                && (result.sw1 == 0x90 || result.sw1 == 0x91)) {
+            iccidChanged = setIccidFromEf(result.simResponse.c_str());
+        }
 
         Return<void> retStatus = radioService[slotId]->mRadioResponse->iccIOForAppResponse(
                 responseInfo, result);
         radioService[slotId]->checkReturnStatus(retStatus);
+
+        // Make the client fetch the card status again, now with the ICCID.
+        if (iccidChanged && radioService[slotId]->mRadioIndication != NULL) {
+            RLOGD("iccIOForAppResponse: ICCID read, reporting SIM status change");
+            Return<void> indStatus = radioService[slotId]->mRadioIndication->simStatusChanged(
+                    RadioIndicationType::UNSOLICITED);
+            radioService[slotId]->checkReturnStatus(indStatus);
+        }
     } else {
         RLOGE("iccIOForAppResponse: radioService[%d]->mRadioResponse == NULL", slotId);
     }
@@ -4904,8 +5540,10 @@ int radio::getDataCallListResponse(int slotId,
             convertRilDataCallListToHal(response, responseLen, ret);
         }
 
-        Return<void> retStatus = radioService[slotId]->mRadioResponse->getDataCallListResponse(
-                responseInfo, ret);
+        Return<void> retStatus = radioService[slotId]->mRadioResponseV1_4 != NULL
+                ? radioService[slotId]->mRadioResponseV1_4->getDataCallListResponse_1_4(responseInfo,
+                        convertDataCallListTo1_4(ret))
+                : radioService[slotId]->mRadioResponse->getDataCallListResponse(responseInfo, ret);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("getDataCallListResponse: radioService[%d]->mRadioResponse == NULL", slotId);
@@ -5127,9 +5765,9 @@ int radio::setPreferredNetworkTypeResponse(int slotId,
     if (radioService[slotId]->mRadioResponse != NULL) {
         RadioResponseInfo responseInfo = {};
         populateResponseInfo(responseInfo, serial, responseType, e);
-        Return<void> retStatus
-                = radioService[slotId]->mRadioResponse->setPreferredNetworkTypeResponse(
-                responseInfo);
+        Return<void> retStatus = radioService[slotId]->mRadioResponseV1_4 != NULL
+                ? radioService[slotId]->mRadioResponseV1_4->setPreferredNetworkTypeBitmapResponse(responseInfo)
+                : radioService[slotId]->mRadioResponse->setPreferredNetworkTypeResponse(responseInfo);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("setPreferredNetworkTypeResponse: radioService[%d]->mRadioResponse == NULL",
@@ -5150,9 +5788,11 @@ int radio::getPreferredNetworkTypeResponse(int slotId,
     if (radioService[slotId]->mRadioResponse != NULL) {
         RadioResponseInfo responseInfo = {};
         int ret = responseInt(responseInfo, serial, responseType, e, response, responseLen);
-        Return<void> retStatus
-                = radioService[slotId]->mRadioResponse->getPreferredNetworkTypeResponse(
-                responseInfo, (PreferredNetworkType) ret);
+        Return<void> retStatus = radioService[slotId]->mRadioResponseV1_4 != NULL
+                ? radioService[slotId]->mRadioResponseV1_4->getPreferredNetworkTypeBitmapResponse(responseInfo,
+                        rafFromNetworkType(ret))
+                : radioService[slotId]->mRadioResponse->getPreferredNetworkTypeResponse(responseInfo,
+                        (PreferredNetworkType) ret);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("getPreferredNetworkTypeResponse: radioService[%d]->mRadioResponse == NULL",
@@ -5993,8 +6633,10 @@ int radio::getCellInfoListResponse(int slotId,
             convertRilCellInfoListToHal(response, responseLen, ret);
         }
 
-        Return<void> retStatus = radioService[slotId]->mRadioResponse->getCellInfoListResponse(
-                responseInfo, ret);
+        Return<void> retStatus = radioService[slotId]->mRadioResponseV1_4 != NULL
+                ? radioService[slotId]->mRadioResponseV1_4->getCellInfoListResponse_1_4(responseInfo,
+                        convertCellInfoListTo1_4(ret))
+                : radioService[slotId]->mRadioResponse->getCellInfoListResponse(responseInfo, ret);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("getCellInfoListResponse: radioService[%d]->mRadioResponse == NULL", slotId);
@@ -6787,8 +7429,9 @@ int radio::startNetworkScanResponse(int slotId, int responseType, int serial, RI
     if (radioService[slotId]->mRadioResponseV1_1 != NULL) {
         RadioResponseInfo responseInfo = {};
         populateResponseInfo(responseInfo, serial, responseType, e);
-        Return<void> retStatus
-                = radioService[slotId]->mRadioResponseV1_1->startNetworkScanResponse(responseInfo);
+        Return<void> retStatus = radioService[slotId]->mRadioResponseV1_4 != NULL
+                ? radioService[slotId]->mRadioResponseV1_4->startNetworkScanResponse_1_4(responseInfo)
+                : radioService[slotId]->mRadioResponseV1_1->startNetworkScanResponse(responseInfo);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("startNetworkScanResponse: radioService[%d]->mRadioResponseV1_1 == NULL", slotId);
@@ -7646,8 +8289,12 @@ int radio::currentSignalStrengthInd(int slotId,
 #if VDBG
         RLOGD("currentSignalStrengthInd");
 #endif
-        Return<void> retStatus = radioService[slotId]->mRadioIndication->currentSignalStrength(
-                convertIntToRadioIndicationType(indicationType), signalStrength);
+        Return<void> retStatus = radioService[slotId]->mRadioIndicationV1_4 != NULL
+                ? radioService[slotId]->mRadioIndicationV1_4->currentSignalStrength_1_4(
+                        convertIntToRadioIndicationType(indicationType),
+                        convertSignalStrengthTo1_4(signalStrength))
+                : radioService[slotId]->mRadioIndication->currentSignalStrength(
+                        convertIntToRadioIndicationType(indicationType), signalStrength);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("currentSignalStrengthInd: radioService[%d]->mRadioIndication == NULL",
@@ -7750,8 +8397,12 @@ int radio::dataCallListChangedInd(int slotId,
 #if VDBG
         RLOGD("dataCallListChangedInd");
 #endif
-        Return<void> retStatus = radioService[slotId]->mRadioIndication->dataCallListChanged(
-                convertIntToRadioIndicationType(indicationType), dcList);
+        Return<void> retStatus = radioService[slotId]->mRadioIndicationV1_4 != NULL
+                ? radioService[slotId]->mRadioIndicationV1_4->dataCallListChanged_1_4(
+                        convertIntToRadioIndicationType(indicationType),
+                        convertDataCallListTo1_4(dcList))
+                : radioService[slotId]->mRadioIndication->dataCallListChanged(
+                        convertIntToRadioIndicationType(indicationType), dcList);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("dataCallListChangedInd: radioService[%d]->mRadioIndication == NULL", slotId);
@@ -8648,8 +9299,12 @@ int radio::cellInfoListInd(int slotId,
 #if VDBG
         RLOGD("cellInfoListInd");
 #endif
-        Return<void> retStatus = radioService[slotId]->mRadioIndication->cellInfoList(
-                convertIntToRadioIndicationType(indicationType), records);
+        Return<void> retStatus = radioService[slotId]->mRadioIndicationV1_4 != NULL
+                ? radioService[slotId]->mRadioIndicationV1_4->cellInfoList_1_4(
+                        convertIntToRadioIndicationType(indicationType),
+                        convertCellInfoListTo1_4(records))
+                : radioService[slotId]->mRadioIndication->cellInfoList(
+                        convertIntToRadioIndicationType(indicationType), records);
         radioService[slotId]->checkReturnStatus(retStatus);
     } else {
         RLOGE("cellInfoListInd: radioService[%d]->mRadioIndication == NULL", slotId);
