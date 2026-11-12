@@ -24,12 +24,45 @@
 #include <android/log.h>
 #include <pthread.h>
 #include "secril-client.h"
-#include <hardware_legacy/power.h> // For wakelock
 
 
 #define RIL_CLIENT_WAKE_LOCK "client-interface"
 
 namespace android {
+
+/*
+ * Take the wake lock through the kernel interface instead of
+ * libhardware_legacy. The audio HAL that uses this library runs with
+ * /dev/vndbinder, where the SystemSuspend service is never registered:
+ * acquire_wake_lock() waited for it forever and blocked the reader thread,
+ * so Disconnect_RILD() at the end of a call never returned and audioserver
+ * aborted on the setPhoneState timeout.
+ */
+static void setWakeLock(bool acquire) {
+    static bool logged = false;
+    const char *path = acquire ? "/sys/power/wake_lock" : "/sys/power/wake_unlock";
+    int fd;
+    ssize_t ret;
+
+    do {
+        fd = open(path, O_WRONLY | O_CLOEXEC);
+    } while (fd < 0 && errno == EINTR);
+    if (fd < 0) {
+        if (!logged) {
+            RLOGE("%s: cannot open %s: %s", __FUNCTION__, path, strerror(errno));
+            logged = true;
+        }
+        return;
+    }
+    do {
+        ret = write(fd, RIL_CLIENT_WAKE_LOCK, strlen(RIL_CLIENT_WAKE_LOCK));
+    } while (ret < 0 && errno == EINTR);
+    if (ret < 0 && !logged) {
+        RLOGE("%s: cannot write %s: %s", __FUNCTION__, path, strerror(errno));
+        logged = true;
+    }
+    close(fd);
+}
 
 //---------------------------------------------------------------------------
 // Defines
@@ -1434,7 +1467,7 @@ static int processRxBuffer(RilClientPrv *prv, void *buffer, size_t buflen) {
     status_t status;
     int ret = RIL_CLIENT_ERR_SUCCESS;
 
-    acquire_wake_lock(PARTIAL_WAKE_LOCK, RIL_CLIENT_WAKE_LOCK);
+    setWakeLock(true);
 
     p.setData((uint8_t *)buffer, buflen);
 
@@ -1462,7 +1495,7 @@ static int processRxBuffer(RilClientPrv *prv, void *buffer, size_t buflen) {
     }
 
 EXIT:
-    release_wake_lock(RIL_CLIENT_WAKE_LOCK);
+    setWakeLock(false);
     return ret;
 }
 

@@ -10,7 +10,6 @@ LOCAL_SHARED_LIBRARIES := \
     libutils \
     libbinder \
     libcutils \
-    libhardware_legacy \
     liblog \
     librilutils
 
@@ -28,8 +27,6 @@ LOCAL_CFLAGS += -DUSES_VND_SECRIL
 endif
 
 LOCAL_MODULE:= libsecril-client
-LOCAL_VENDOR_MODULE := true
-
 LOCAL_VENDOR_MODULE := true
 
 include $(BUILD_SHARED_LIBRARY)
