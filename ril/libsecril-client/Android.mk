@@ -10,7 +10,6 @@ LOCAL_SHARED_LIBRARIES := \
     libutils \
     libbinder \
     libcutils \
-    libhardware_legacy \
     liblog
 
 LOCAL_CFLAGS := -Wno-error
@@ -26,6 +25,7 @@ ifeq ($(TARGET_USES_VND_SECRIL), true)
 LOCAL_CFLAGS += -DUSES_VND_SECRIL
 endif
 
+LOCAL_VENDOR_MODULE := true
 LOCAL_MODULE:= libsecril-client
 LOCAL_PRELINK_MODULE := false
 
