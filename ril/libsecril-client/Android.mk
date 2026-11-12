@@ -10,8 +10,10 @@ LOCAL_SHARED_LIBRARIES := \
     libutils \
     libbinder \
     libcutils \
-    libhardware_legacy \
     liblog
+
+LOCAL_C_INCLUDES += \
+    hardware/ril/include
 
 LOCAL_CFLAGS := -Wno-error
 
@@ -27,6 +29,6 @@ LOCAL_CFLAGS += -DUSES_VND_SECRIL
 endif
 
 LOCAL_MODULE:= libsecril-client
-LOCAL_PRELINK_MODULE := false
+LOCAL_VENDOR_MODULE := true
 
 include $(BUILD_SHARED_LIBRARY)
