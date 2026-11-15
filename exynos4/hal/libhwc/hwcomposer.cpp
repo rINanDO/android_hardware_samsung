@@ -152,6 +152,14 @@ static bool is_rotated(const hwc_layer_1_t &layer)
             (layer.transform & HAL_TRANSFORM_ROT_180);
 }
 
+/* A plain rotation, which the FIMC output rotator can do; no flips */
+static bool is_fimc_rotation(const hwc_layer_1_t &layer)
+{
+    return layer.transform == HAL_TRANSFORM_ROT_90 ||
+            layer.transform == HAL_TRANSFORM_ROT_180 ||
+            layer.transform == HAL_TRANSFORM_ROT_270;
+}
+
 static bool is_scaled(const hwc_layer_1_t &layer)
 {
     hwc_rect_t crop = integerizeSourceCrop(layer.sourceCropf);
@@ -404,7 +412,8 @@ bool is_overlay_supported(struct hwc_context_t *ctx, hwc_layer_1_t &layer, size_
         case HAL_PIXEL_FORMAT_YCbCr_420_SP_TILED:
             /* SEC OMX decoder output: contiguous ION memory, FIMC reads it */
             result = ctx->video_overlay_test && prev_handle->paddr &&
-                    !is_transformed(layer);
+                    (!is_transformed(layer) ||
+                     (ctx->video_rotation_test && is_fimc_rotation(layer)));
             break;
         case HAL_PIXEL_FORMAT_YV12:                 /* YCrCb_420_P */
         case HAL_PIXEL_FORMAT_YCbCr_420_P:
@@ -412,7 +421,8 @@ bool is_overlay_supported(struct hwc_context_t *ctx, hwc_layer_1_t &layer, size_
         case HAL_PIXEL_FORMAT_YCbCr_420_SP:
             if (ctx->video_overlay_test && prev_handle->paddr &&
                     (prev_handle->flags & private_handle_t::PRIV_FLAGS_USES_ION) &&
-                    !is_transformed(layer)) {
+                    (!is_transformed(layer) ||
+                     (ctx->video_rotation_test && is_fimc_rotation(layer)))) {
                 result = true;
                 break;
             }
@@ -762,6 +772,7 @@ static int prepare_fimd(hwc_context_t *ctx, hwc_display_contents_1_t* contents)
         ctx->rgb_overlay_test = property_get_bool("debug.hwc.rgb_overlay", true);
         ctx->app_overlay_test = property_get_bool("debug.hwc.app_overlay", true);
         ctx->video_overlay_test = property_get_bool("debug.hwc.video_overlay", true);
+        ctx->video_rotation_test = property_get_bool("debug.hwc.video_rotation", true);
         g_video_overlay_test = ctx->video_overlay_test;
     }
 
@@ -982,24 +993,54 @@ static int perform_fimc(hwc_context_t *ctx, const hwc_layer_1_t &layer, struct h
 
     struct private_handle_t *dst_handle = private_handle_t::dynamicCast(win.dst_buf[win.current_buf]);
     uint32_t dst_addr = (uint32_t) dst_handle->paddr;
-    int w, h, fbuf_w;
+    int w, h, fbuf_w, fbuf_h, win_l = 0, win_t = 0;
 
     /* FIMC takes the width of the framebuffer as the pitch of the rows it
      * writes, and the window as the size of the picture. The FIMD window
      * scans the buffer out with a pitch of EXYNOS4_ALIGN(w, 16), so the
      * framebuffer must be that wide, or a picture whose width isn't a
-     * multiple of 16 comes out sheared. */
-    if (rotate == 90 || rotate == 270) {
-        w = HEIGHT(layer.displayFrame);
-        h = EXYNOS4_ALIGN(WIDTH(layer.displayFrame), 16);
-        fbuf_w = w;
-    } else {
-        w = WIDTH(layer.displayFrame);
-        h = EXYNOS4_ALIGN(HEIGHT(layer.displayFrame), 16);
-        fbuf_w = EXYNOS4_ALIGN(w, 16);
+     * multiple of 16 comes out sheared.
+     *
+     * With rotation the driver takes the framebuffer and the window before
+     * rotation (fbuf height = pitch) and places the rotated window from the
+     * far edge, so offset the window to put the picture at (0, 0). */
+    int disp_w = WIDTH(layer.displayFrame);
+    int disp_h = HEIGHT(layer.displayFrame);
+    int pitch = EXYNOS4_ALIGN(disp_w, 16);
+    int rows = EXYNOS4_ALIGN(disp_h, 16);
+
+    switch (rotate) {
+    case 90:
+        fbuf_w = rows;
+        fbuf_h = pitch;
+        w = disp_h;
+        h = disp_w;
+        win_t = pitch - disp_w;
+        break;
+    case 270:
+        fbuf_w = rows;
+        fbuf_h = pitch;
+        w = disp_h;
+        h = disp_w;
+        win_l = rows - disp_h;
+        break;
+    case 180:
+        fbuf_w = pitch;
+        fbuf_h = rows;
+        w = disp_w;
+        h = disp_h;
+        win_l = pitch - disp_w;
+        win_t = rows - disp_h;
+        break;
+    default:
+        fbuf_w = pitch;
+        fbuf_h = rows;
+        w = disp_w;
+        h = rows;
+        break;
     }
 
-    ret = v4l2_s_fbuf(ctx, (void *)dst_addr, fbuf_w, h, V4L2_PIX_FMT_RGB32);
+    ret = v4l2_s_fbuf(ctx, (void *)dst_addr, fbuf_w, fbuf_h, V4L2_PIX_FMT_RGB32);
     if (ret < 0) {
         ALOGE("%s: v4l2_s_fbuf(dst_addr(0x%x)) rc=%d", __FUNCTION__, dst_addr, ret);
         return ret;
@@ -1015,7 +1056,7 @@ static int perform_fimc(hwc_context_t *ctx, const hwc_layer_1_t &layer, struct h
         return ret;
     }
 
-    ret = v4l2_s_fmt_win(ctx, 0, 0, w, h);
+    ret = v4l2_s_fmt_win(ctx, win_l, win_t, w, h);
     if (ret < 0) {
         ALOGE("%s: v4l2_s_fmt_win() rc=%d", __FUNCTION__, ret);
         return ret;

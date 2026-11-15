@@ -140,6 +140,7 @@ struct hwc_context_t {
     bool                      rgb_overlay_test; // debug.hwc.rgb_overlay
     bool                      app_overlay_test; // debug.hwc.app_overlay
     bool                      video_overlay_test; // debug.hwc.video_overlay
+    bool                      video_rotation_test; // debug.hwc.video_rotation
 
     struct hwc_win_info_t     win[NUM_HW_WINDOWS];
 
