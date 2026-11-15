@@ -347,6 +347,13 @@ bool is_overlay_supported(struct hwc_context_t *ctx, hwc_layer_1_t &layer, size_
         return false;
     }
 
+    /* s3cfb rejects a window config narrower than 128 bytes, which fails
+     * the whole frame and leaves the screen black */
+    if (visible_width(ctx, layer) < 128) {
+        ALOGV("%s: layer %u: too narrow for a window", __func__, i);
+        return false;
+    }
+
     bool result = false;
     private_handle_t *prev_handle = (private_handle_t *)(layer.handle);
 
