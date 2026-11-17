@@ -419,12 +419,15 @@ bool is_overlay_supported(struct hwc_context_t *ctx, hwc_layer_1_t &layer, size_
         case HAL_PIXEL_FORMAT_YCbCr_420_P:
         case HAL_PIXEL_FORMAT_YCrCb_420_SP:
         case HAL_PIXEL_FORMAT_YCbCr_420_SP:
-            /* No rotation: the camera preview comes in these formats, and
-             * while the camera is open it keeps FIMC2 for recording. A
-             * rotated preview would take FIMC2 from the recorder. */
+            /* Only rotate the hardware decoder's output (YCbCr_420_P). The
+             * camera preview is NV21 or YV12, and while the camera is open
+             * it keeps FIMC2 for recording: a rotated preview would take
+             * FIMC2 from the recorder. */
             if (ctx->video_overlay_test && prev_handle->paddr &&
                     (prev_handle->flags & private_handle_t::PRIV_FLAGS_USES_ION) &&
-                    !is_transformed(layer)) {
+                    (!is_transformed(layer) ||
+                     (ctx->video_rotation_test && is_fimc_rotation(layer) &&
+                      prev_handle->format == HAL_PIXEL_FORMAT_YCbCr_420_P))) {
                 result = true;
                 break;
             }
