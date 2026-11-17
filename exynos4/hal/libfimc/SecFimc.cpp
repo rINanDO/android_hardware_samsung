@@ -466,6 +466,12 @@ int fimc_switch_color_format(int color_space)
             return V4L2_PIX_FMT_NV12T;
             break;
 
+        /* galaxys2: MFC decoder output (64x32 tiles), as in sec_utils.h */
+        case HAL_PIXEL_FORMAT_CUSTOM_YCbCr_420_SP_TILED:
+        case HAL_PIXEL_FORMAT_YCbCr_420_SP_TILED:
+            return V4L2_PIX_FMT_NV12T;
+            break;
+
         case HAL_PIXEL_FORMAT_CUSTOM_YCrCb_420_SP:
             return V4L2_PIX_FMT_NV21;
             break;
@@ -1142,6 +1148,27 @@ bool SecFimc::setDstPhyAddr(unsigned int physYAddr, unsigned int physCbAddr, uns
     {
         ALOGE("%s :: fimc_v4l2_set_dst", __func__);
         return false;
+    }
+
+    /* galaxys2: in the FIMC_OVLY_NONE_* multi-buffer mode the driver writes
+     * to ctx->dst[], not to the S_FBUF base, so give it the external
+     * destination planes as well. Without this the converted frame never
+     * reaches the caller's buffer. */
+    if (mS5pFimc.use_ext_out_mem) {
+        struct fimc_buf dst_buf;
+        struct v4l2_control vc;
+
+        memset(&dst_buf, 0, sizeof(dst_buf));
+        dst_buf.base[0] = physYAddr;
+        dst_buf.base[1] = physCbAddr;
+        dst_buf.base[2] = physCrAddr;
+
+        vc.id = V4L2_CID_DST_INFO;
+        vc.value = (int)&dst_buf;
+        if (ioctl(mS5pFimc.dev_fd, VIDIOC_S_CTRL, &vc) < 0) {
+            ALOGE("%s :: V4L2_CID_DST_INFO failed", __func__);
+            return false;
+        }
     }
 
     return true;

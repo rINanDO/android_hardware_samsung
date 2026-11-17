@@ -1410,13 +1410,14 @@ OMX_ERRORTYPE SEC_MFC_Mpeg4_Decode_Nonblock(OMX_COMPONENTTYPE *pOMXComponent, SE
 #ifdef USE_CSC_FIMC
                 if ((pSECOutputPort->bIsANBEnabled == OMX_TRUE) && (pMpeg4Dec->hFIMCHandle != NULL)) {
                     void *pPhys[3];
-                    SEC_OSAL_GetPhysANB(pOutputData->dataBuffer, pPhys);
-                    pYUVBuf[0] = outputInfo.YPhyAddr;
-                    pYUVBuf[1] = outputInfo.CPhyAddr;
-                    csc_fimc_convert_nv12t(pMpeg4Dec->hFIMCHandle, pPhys,
-                                        pYUVBuf, width, height,
-                                        OMX_COLOR_FormatYUV420SemiPlanar);
-                    break;
+                    if (SEC_OSAL_GetPhysANB(pOutputData->dataBuffer, pPhys) == OMX_ErrorNone) {
+                        pYUVBuf[0] = outputInfo.YPhyAddr;
+                        pYUVBuf[1] = outputInfo.CPhyAddr;
+                        csc_fimc_convert_nv12t(pMpeg4Dec->hFIMCHandle, pPhys,
+                                            pYUVBuf, width, height,
+                                            OMX_COLOR_FormatYUV420SemiPlanar);
+                        break;
+                    }
                 }
 #endif
                 csc_tiled_to_linear_y_neon(
@@ -1436,13 +1437,14 @@ OMX_ERRORTYPE SEC_MFC_Mpeg4_Decode_Nonblock(OMX_COMPONENTTYPE *pOMXComponent, SE
 #ifdef USE_CSC_FIMC
                 if ((pSECOutputPort->bIsANBEnabled == OMX_TRUE) && (pMpeg4Dec->hFIMCHandle != NULL)) {
                     void *pPhys[3];
-                    SEC_OSAL_GetPhysANB(pOutputData->dataBuffer, pPhys);
-                    pYUVBuf[0] = outputInfo.YPhyAddr;
-                    pYUVBuf[1] = outputInfo.CPhyAddr;
-                    csc_fimc_convert_nv12t(pMpeg4Dec->hFIMCHandle, pPhys,
-                                        pYUVBuf, width, height,
-                                        OMX_COLOR_FormatYUV420Planar);
-                    break;
+                    if (SEC_OSAL_GetPhysANB(pOutputData->dataBuffer, pPhys) == OMX_ErrorNone) {
+                        pYUVBuf[0] = outputInfo.YPhyAddr;
+                        pYUVBuf[1] = outputInfo.CPhyAddr;
+                        csc_fimc_convert_nv12t(pMpeg4Dec->hFIMCHandle, pPhys,
+                                            pYUVBuf, width, height,
+                                            OMX_COLOR_FormatYUV420Planar);
+                        break;
+                    }
                 }
 #endif
                csc_tiled_to_linear_y_neon(
@@ -1680,13 +1682,14 @@ OMX_ERRORTYPE SEC_MFC_Mpeg4_Decode_Block(OMX_COMPONENTTYPE *pOMXComponent, SEC_O
 #ifdef USE_CSC_FIMC
                     if ((pSECOutputPort->bIsANBEnabled == OMX_TRUE) && (pMpeg4Dec->hFIMCHandle != NULL)) {
                         void *pPhys[3];
-                        SEC_OSAL_GetPhysANB(pOutputData->dataBuffer, pPhys);
-                        pYUVBuf[0] = outputInfo.YPhyAddr;
-                        pYUVBuf[1] = outputInfo.CPhyAddr;
-                        csc_fimc_convert_nv12t(pMpeg4Dec->hFIMCHandle, pPhys,
-                                            pYUVBuf, width, height,
-                                            OMX_SEC_COLOR_FormatANBYUV420SemiPlanar);
-                        break;
+                        if (SEC_OSAL_GetPhysANB(pOutputData->dataBuffer, pPhys) == OMX_ErrorNone) {
+                            pYUVBuf[0] = outputInfo.YPhyAddr;
+                            pYUVBuf[1] = outputInfo.CPhyAddr;
+                            csc_fimc_convert_nv12t(pMpeg4Dec->hFIMCHandle, pPhys,
+                                                pYUVBuf, width, height,
+                                                OMX_SEC_COLOR_FormatANBYUV420SemiPlanar);
+                            break;
+                        }
                     }
 #endif
                     csc_tiled_to_linear_y_neon(
@@ -1706,13 +1709,14 @@ OMX_ERRORTYPE SEC_MFC_Mpeg4_Decode_Block(OMX_COMPONENTTYPE *pOMXComponent, SEC_O
 #ifdef USE_CSC_FIMC
                     if ((pSECOutputPort->bIsANBEnabled == OMX_TRUE) && (pMpeg4Dec->hFIMCHandle != NULL)) {
                         void *pPhys[3];
-                        SEC_OSAL_GetPhysANB(pOutputData->dataBuffer, pPhys);
-                        pYUVBuf[0] = outputInfo.YPhyAddr;
-                        pYUVBuf[1] = outputInfo.CPhyAddr;
-                        csc_fimc_convert_nv12t(pMpeg4Dec->hFIMCHandle, pPhys,
-                                            pYUVBuf, width, height,
-                                            OMX_COLOR_FormatYUV420Planar);
-                        break;
+                        if (SEC_OSAL_GetPhysANB(pOutputData->dataBuffer, pPhys) == OMX_ErrorNone) {
+                            pYUVBuf[0] = outputInfo.YPhyAddr;
+                            pYUVBuf[1] = outputInfo.CPhyAddr;
+                            csc_fimc_convert_nv12t(pMpeg4Dec->hFIMCHandle, pPhys,
+                                                pYUVBuf, width, height,
+                                                OMX_COLOR_FormatYUV420Planar);
+                            break;
+                        }
                     }
 #endif
                     csc_tiled_to_linear_y_neon(

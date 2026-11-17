@@ -212,18 +212,25 @@ OMX_ERRORTYPE SEC_OSAL_GetPhysANBHandle(
     FunctionIn();
 
     OMX_ERRORTYPE ret = OMX_ErrorNone;
-    GraphicBufferMapper &mapper = GraphicBufferMapper::get();
-    buffer_handle_t bufferHandle = (buffer_handle_t) handle;
+    private_handle_t *hnd = private_handle_t::dynamicCast((const native_handle *)handle);
 
     SEC_OSAL_Log(SEC_LOG_TRACE, "%s: handle: 0x%x", __func__, handle);
 
-/*
-    if (mapper.getphys(bufferHandle, paddr) != 0) {
-        SEC_OSAL_Log(SEC_LOG_ERROR, "%s: mapper.getphys() fail", __func__);
+    /* galaxys2: FIMC writes the decoded frame straight into the gralloc
+     * buffer, so it needs the physical address of each plane. Only ION
+     * buffers are physically contiguous; for anything else the caller
+     * falls back to the NEON conversion. The plane layout matches
+     * gralloc's GRALLOC_USAGE_YUV_ADDR lock and the HWC's FIMC source. */
+    if (hnd == NULL || hnd->paddr == 0 ||
+            !(hnd->flags & private_handle_t::PRIV_FLAGS_USES_ION)) {
         ret = OMX_ErrorUndefined;
         goto EXIT;
     }
-*/
+
+    paddr[0] = (OMX_PTR)(hnd->paddr + hnd->offset);
+    paddr[1] = (OMX_PTR)(hnd->paddr + hnd->offset + hnd->uoffset);
+    paddr[2] = (OMX_PTR)(hnd->paddr + hnd->offset + hnd->uoffset + hnd->voffset);
+
 EXIT:
     FunctionOut();
 

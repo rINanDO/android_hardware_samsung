@@ -125,18 +125,18 @@ unsigned int HardwareConverter::OMXtoHarPixelFomrat(OMX_COLOR_FORMATTYPE omx_for
 {
     unsigned int hal_format = 0;
 
-    switch (omx_format) {
+    switch ((unsigned int)omx_format) {
     case OMX_COLOR_FormatYUV420Planar:
         hal_format = HAL_PIXEL_FORMAT_YCbCr_420_P;
         break;
     case OMX_COLOR_FormatYUV420SemiPlanar:
         hal_format = HAL_PIXEL_FORMAT_YCbCr_420_SP;
         break;
-/*
+    /* galaxys2: the MFC decoder's output is NV12 in 64x32 tiles. Without
+     * this case FIMC read it as planar YUV420 and the picture was garbage. */
     case OMX_SEC_COLOR_FormatNV12TPhysicalAddress:
         hal_format = HAL_PIXEL_FORMAT_CUSTOM_YCbCr_420_SP_TILED;
         break;
-*/
     default:
         hal_format = HAL_PIXEL_FORMAT_YCbCr_420_P;
         break;
