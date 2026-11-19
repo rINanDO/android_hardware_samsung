@@ -24,7 +24,9 @@ HardwareConverter::HardwareConverter()
     SecFimc* handle_fimc = new SecFimc();
     mSecFimc = (void *)handle_fimc;
 
-    if (handle_fimc->create(SecFimc::FIMC_DEV0, FIMC_OVLY_NONE_MULTI_BUF, 1) == false)
+    // Convert on FIMC1: the rear camera captures on FIMC0, and the front
+    // camera and the HWC use FIMC2.
+    if (handle_fimc->create(SecFimc::FIMC_DEV1, FIMC_OVLY_NONE_MULTI_BUF, 1) == false)
         bHWconvert_flag = 0;
     else
         bHWconvert_flag = 1;
