@@ -428,6 +428,32 @@ sd
         ALOGD_IF(debug_level > 1, "%s: ump_id:%d ump_mem_handle:%08x", __func__, hnd->ump_id, hnd->ump_mem_handle);
 
         hnd->ump_mem_handle = (int)ump_handle_create_from_secure_id(hnd->ump_id);
+
+        /*
+         * The allocation holds the only UMP reference, so the secure ID is
+         * gone once the allocator frees its handle. A clone of the handle
+         * (allocateRawHandle(), used by the codecs) still holds the ION fd,
+         * so import that into UMP again.
+         */
+        if (UMP_INVALID_MEMORY_HANDLE == (ump_handle)hnd->ump_mem_handle &&
+                (hnd->flags & private_handle_t::PRIV_FLAGS_USES_ION) && hnd->fd > 0) {
+            ump_handle ump_mem_handle = ump_ref_drv_ion_import(hnd->fd,
+                    (hnd->flags & private_handle_t::PRIV_FLAGS_NONE_CACHED) ?
+                    UMP_REF_DRV_CONSTRAINT_NONE : UMP_REF_DRV_CONSTRAINT_USE_CACHE);
+            if (UMP_INVALID_MEMORY_HANDLE != ump_mem_handle) {
+                ump_secure_id ump_id = ump_secure_id_get(ump_mem_handle);
+#ifdef USE_PARTIAL_FLUSH
+                private_handle_rect *psRect = find_rect(hnd->ump_id);
+                if (psRect)
+                    psRect->handle = (int)ump_id;
+#endif
+                ALOGD_IF(debug_level > 0, "%s: ump_id:%d imported again from ION as %d",
+                        __func__, hnd->ump_id, ump_id);
+                hnd->ump_id = ump_id;
+                hnd->ump_mem_handle = (int)ump_mem_handle;
+            }
+        }
+
         ALOGD_IF(debug_partial_flush > 0, "%s: PARTIAL_FLUSH ump_id:%d ump_mem_handle:%08x flags=%x usage=%x count:%d", __func__, hnd->ump_id, hnd->ump_mem_handle, hnd->flags, hnd->usage, count_rect(hnd->ump_id));
 
         ALOGD_IF(debug_level > 0, "%s PRIV_FLAGS_USES_UMP hnd->ump_mem_handle=%d(%x)", __func__, hnd->ump_mem_handle, hnd->ump_mem_handle);
@@ -449,6 +475,11 @@ sd
         } else {
             ALOGE("%s Failed to create UMP handle", __func__);
         }
+
+        /* Don't release the handle again below: libUMP aborts on it. */
+        hnd->ump_mem_handle = (int)UMP_INVALID_MEMORY_HANDLE;
+        pthread_mutex_unlock(&s_map_lock);
+        return retval;
 
     } else if (hnd->flags & private_handle_t::PRIV_FLAGS_USES_PMEM) {
         ALOGE("%s PRIV_FLAGS_USES_PMEM mapping: base:%08x", __func__, hnd->base);
