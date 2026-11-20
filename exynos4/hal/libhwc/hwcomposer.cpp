@@ -101,6 +101,21 @@ static int dup_or_warn(int fence)
     return dup_fd;
 }
 
+/* Wait until the window's next destination buffer is no longer scanned out
+ * before FIMC or FIMG draws into it, see set_fimd() */
+static void wait_dst_buf(struct hwc_win_info_t &win)
+{
+    int &fence = win.dst_buf_fence[win.current_buf];
+    if (fence < 0)
+        return;
+
+    if (sync_wait(fence, 1000) < 0)
+        ALOGW("%s: destination buffer still on screen after 1 s", __func__);
+
+    close(fence);
+    fence = -1;
+}
+
 static bool format_is_supported_by_fimg(int format)
 {
     switch (format) {
@@ -1191,6 +1206,9 @@ static int post_fimd(hwc_context_t *ctx, hwc_display_contents_1_t* contents)
                 continue;
             }
 
+            if (win.gsc.mode == gsc_map_t::FIMG || win.gsc.mode == gsc_map_t::FIMC)
+                wait_dst_buf(win);
+
             switch(win.gsc.mode) {
             case gsc_map_t::FIMG:
                 ALOGV("%s: layer %d perform FIMG operation", __FUNCTION__, i);
@@ -1322,19 +1340,23 @@ static int set_fimd(hwc_context_t *ctx, hwc_display_contents_1_t *contents)
             hwc_layer_1_t &layer = contents->hwLayers[layer_idx];
             int dup_fd = dup_or_warn(fence);
 
-            if (ctx->win[i].gsc.mode == gsc_map_t::FIMG) {
-                if (ctx->win[i].dst_buf_fence[ctx->win[i].current_buf] >= 0)
-                    close(ctx->win[i].dst_buf_fence[ctx->win[i].current_buf]);
+            if (ctx->win[i].gsc.mode == gsc_map_t::FIMG ||
+                    ctx->win[i].gsc.mode == gsc_map_t::FIMC) {
+                struct hwc_win_info_t &win = ctx->win[i];
+                /* This frame's buffer replaces the previous one on screen
+                 * once the retire fence signals. The kernel queues window
+                 * updates, so up to two frames can be waiting while the
+                 * one before them is still scanned out: with three buffers
+                 * that is the buffer the next frame would be drawn into.
+                 * wait_dst_buf() waits for this fence before that. */
+                size_t prev = (win.current_buf + NUM_OF_WIN_BUF - 1) % NUM_OF_WIN_BUF;
+                if (win.dst_buf_fence[prev] >= 0)
+                    close(win.dst_buf_fence[prev]);
+                win.dst_buf_fence[prev] = dup_or_warn(fence);
+                win.current_buf = (win.current_buf + 1) % NUM_OF_WIN_BUF;
 
-                ctx->win[i].dst_buf_fence[ctx->win[i].current_buf] = dup_fd;
-                ctx->win[i].current_buf = (ctx->win[i].current_buf + 1) % NUM_OF_WIN_BUF;
-
-                layer.releaseFenceFd = -1;
-            } else if (ctx->win[i].gsc.mode == gsc_map_t::FIMC) {
-                /* FIMC has finished reading the source; scan out the next
-                 * destination buffer, not the one on screen */
+                /* FIMG and FIMC have finished reading the source */
                 layer.releaseFenceFd = dup_fd;
-                ctx->win[i].current_buf = (ctx->win[i].current_buf + 1) % NUM_OF_WIN_BUF;
             } else {
                 layer.releaseFenceFd = dup_fd;
             }
