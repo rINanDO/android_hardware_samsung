@@ -361,6 +361,17 @@ static bool is_rgb_fullscreen_bottom_overlay(struct hwc_context_t *ctx,
     return f.left == 0 && f.top == 0 && f.right == ctx->xres && f.bottom == ctx->yres;
 }
 
+/* Output formats of the SEC OMX decoders: NV12T, or YCbCr_420_P when the
+ * decoder converts on FIMC (BOARD_USE_CSC_FIMC) */
+static bool is_decoder_video_format(int format)
+{
+    return format == HAL_PIXEL_FORMAT_YCbCr_420_SP_TILED ||
+            format == HAL_PIXEL_FORMAT_YCbCr_420_P;
+}
+
+/* About 2 s at 60 fps */
+#define VIDEO_GPU_HOLD_FRAMES 120
+
 bool is_overlay_supported(struct hwc_context_t *ctx, hwc_layer_1_t &layer, size_t i)
 {
    if(layer.flags & HWC_SKIP_LAYER  || !layer.handle) {
@@ -400,6 +411,24 @@ bool is_overlay_supported(struct hwc_context_t *ctx, hwc_layer_1_t &layer, size_
                     prev_handle->paddr, layer.blending);
             last_logged_format = prev_handle->format;
         }
+    }
+
+    if (i == 0 && ctx->video_overlay_test && is_decoder_video_format(prev_handle->format)) {
+        /* When the contiguous ION heap is full, gralloc gives some of the
+         * decoder's buffers UMP memory without a physical address, which
+         * FIMC can't read. Composing those frames on the GPU and the others
+         * on FIMC makes the video flicker and shake, as the two paths scale
+         * differently. Keep the video on the GPU while such buffers show
+         * up, and for a while after the last one. */
+        if (!prev_handle->paddr ||
+                !(prev_handle->flags & private_handle_t::PRIV_FLAGS_USES_ION)) {
+            if (ctx->video_gpu_frames == 0)
+                ALOGI("%s: video buffer without a physical address, composing the video on the GPU",
+                        __func__);
+            ctx->video_gpu_frames = VIDEO_GPU_HOLD_FRAMES;
+        }
+        if (ctx->video_gpu_frames > 0)
+            return false;
     }
 
     if (i == 0) {
@@ -799,6 +828,9 @@ static int prepare_fimd(hwc_context_t *ctx, hwc_display_contents_1_t* contents)
     if (ctx->bypass_count > 0) {
         ctx->force_fb = true;
     }
+
+    if (ctx->video_gpu_frames > 0)
+        ctx->video_gpu_frames--;
 
     determineSupportedOverlays(ctx, contents);
     determineBandwidthSupport(ctx, contents);
