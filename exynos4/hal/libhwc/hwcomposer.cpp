@@ -361,6 +361,43 @@ static bool is_rgb_fullscreen_bottom_overlay(struct hwc_context_t *ctx,
     return f.left == 0 && f.top == 0 && f.right == ctx->xres && f.bottom == ctx->yres;
 }
 
+/*
+ * Scan out a full-screen RGBA layer that sits above a video layer
+ * on FIMC (a WebView with a SurfaceControl video overlay: the page
+ * has a transparent hole over the video) on a blending FIMD window.
+ * Otherwise SurfaceFlinger copies the whole page into the framebuffer
+ * target with the GPU on every frame. debug.hwc.app_over_video=0
+ * disables it.
+ */
+static bool is_rgb_fullscreen_over_video(struct hwc_context_t *ctx,
+        hwc_layer_1_t &layer, private_handle_t *hnd, size_t i)
+{
+    if (i == 0 || !ctx->video_on_window || !hnd->paddr ||
+            !(hnd->flags & private_handle_t::PRIV_FLAGS_USES_ION))
+        return false;
+
+    // config_overlay() always programs the window as RGBA_8888
+    if (hnd->format != HAL_PIXEL_FORMAT_RGBA_8888)
+        return false;
+
+    if (is_scaled(layer) || is_transformed(layer))
+        return false;
+
+    if (layer.blending != HWC_BLENDING_NONE &&
+            layer.blending != HWC_BLENDING_PREMULT)
+        return false;
+
+    if (layer.planeAlpha && layer.planeAlpha < 255)
+        return false;
+
+    hwc_rect_t crop = integerizeSourceCrop(layer.sourceCropf);
+    if (crop.left != 0 || crop.top != 0)
+        return false;
+
+    const hwc_rect_t &f = layer.displayFrame;
+    return f.left == 0 && f.top == 0 && f.right == ctx->xres && f.bottom == ctx->yres;
+}
+
 /* Output formats of the SEC OMX decoders: NV12T, or YCbCr_420_P when the
  * decoder converts on FIMC (BOARD_USE_CSC_FIMC) */
 static bool is_decoder_video_format(int format)
@@ -394,6 +431,12 @@ bool is_overlay_supported(struct hwc_context_t *ctx, hwc_layer_1_t &layer, size_
     if (ctx->app_overlay_test &&
             is_rgb_fullscreen_bottom_overlay(ctx, layer, prev_handle, i)) {
         ALOGV("%s: layer %u: RGB full-screen overlay paddr(0x%x)", __func__, i, prev_handle->paddr);
+        return true;
+    }
+
+    if (ctx->app_over_video_test &&
+            is_rgb_fullscreen_over_video(ctx, layer, prev_handle, i)) {
+        ALOGV("%s: layer %u: RGB full-screen overlay above video paddr(0x%x)", __func__, i, prev_handle->paddr);
         return true;
     }
 
@@ -512,6 +555,7 @@ void determineSupportedOverlays(hwc_context_t *ctx, hwc_display_contents_1_t *co
     ctx->fb_needed = false;
     ctx->first_fb = 0;
     ctx->last_fb = 0;
+    ctx->video_on_window = false;
 
 #if DEBUG_SPAMMY
     for (size_t i=0 ; i < contents->numHwLayers ; i++)
@@ -535,6 +579,8 @@ void determineSupportedOverlays(hwc_context_t *ctx, hwc_display_contents_1_t *co
         if (is_overlay_supported(ctx, contents->hwLayers[i], i) && !ctx->force_fb) {
             ALOGV("\tlayer %u: overlay supported", i);
             layer.compositionType = HWC_OVERLAY;
+            if (i == 0 && layer_requires_process(layer) == gsc_map_t::FIMC)
+                ctx->video_on_window = true;
             continue;
         } else {
             ALOGV("%s: layer %u: overlay not supported, force_fb(%d)", __FUNCTION__, i, ctx->force_fb);
@@ -822,6 +868,7 @@ static int prepare_fimd(hwc_context_t *ctx, hwc_display_contents_1_t* contents)
         ctx->app_overlay_test = property_get_bool("debug.hwc.app_overlay", true);
         ctx->video_overlay_test = property_get_bool("debug.hwc.video_overlay", true);
         ctx->video_rotation_test = property_get_bool("debug.hwc.video_rotation", true);
+        ctx->app_over_video_test = property_get_bool("debug.hwc.app_over_video", true);
         g_video_overlay_test = ctx->video_overlay_test;
     }
 

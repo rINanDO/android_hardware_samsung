@@ -141,6 +141,8 @@ struct hwc_context_t {
     bool                      app_overlay_test; // debug.hwc.app_overlay
     bool                      video_overlay_test; // debug.hwc.video_overlay
     bool                      video_rotation_test; // debug.hwc.video_rotation
+    bool                      app_over_video_test; // debug.hwc.app_over_video
+    bool                      video_on_window; // this frame's bottom layer is video on FIMC
     int                       video_gpu_frames; // frames left to keep video on the GPU
 
     struct hwc_win_info_t     win[NUM_HW_WINDOWS];
