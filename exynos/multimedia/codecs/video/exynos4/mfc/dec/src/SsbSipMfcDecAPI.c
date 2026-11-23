@@ -1105,3 +1105,29 @@ void tile_to_linear_4x2(unsigned char *p_linear_addr, unsigned char *p_tiled_add
     }
 }
 #endif
+
+SSBSIP_MFC_ERROR_CODE SsbSipMfcDecGetFreeMem(void *openHandle, unsigned int total[2], unsigned int largest[2])
+{
+    int i, fd, ret;
+    struct mfc_common_args DecArg;
+
+    /* Without a handle, e.g. while a codec is being configured, ask through
+     * a short-lived instance. */
+    fd = openHandle ? ((_MFCLIB *)openHandle)->hMFC : open(mfc_dev_name, O_RDWR | O_NDELAY);
+    if (fd < 0)
+        return MFC_RET_FAIL;
+
+    memset(&DecArg, 0x00, sizeof(DecArg));
+    ret = ioctl(fd, IOCTL_MFC_GET_FREE_MEM, &DecArg);
+    if (openHandle == NULL)
+        close(fd);
+    if (ret < 0 || DecArg.ret_code != MFC_OK)
+        return MFC_RET_FAIL;
+
+    for (i = 0; i < MFC_FREE_MEM_PORTS; i++) {
+        total[i] = DecArg.args.free_mem.total[i];
+        largest[i] = DecArg.args.free_mem.largest[i];
+    }
+
+    return MFC_RET_OK;
+}

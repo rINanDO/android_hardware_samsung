@@ -384,6 +384,10 @@ SSBSIP_MFC_DEC_OUTBUF_STATUS SsbSipMfcDecGetOutBuf(void *openHandle, SSBSIP_MFC_
 SSBSIP_MFC_ERROR_CODE SsbSipMfcDecSetConfig(void *openHandle, SSBSIP_MFC_DEC_CONF conf_type, void *value);
 SSBSIP_MFC_ERROR_CODE SsbSipMfcDecGetConfig(void *openHandle, SSBSIP_MFC_DEC_CONF conf_type, void *value);
 
+/* Free MFC memory per port (0: port A, 1: port B); openHandle may be NULL.
+ * Fails on kernels without IOCTL_MFC_GET_FREE_MEM. */
+SSBSIP_MFC_ERROR_CODE SsbSipMfcDecGetFreeMem(void *openHandle, unsigned int total[2], unsigned int largest[2]);
+
 /*--------------------------------------------------------------------------------*/
 /* Encoding APIs                                                                  */
 /*--------------------------------------------------------------------------------*/

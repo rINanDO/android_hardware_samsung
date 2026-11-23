@@ -43,6 +43,8 @@
 
 #define IOCTL_MFC_SET_BUF_CACHE         (0x00800201)
 
+#define IOCTL_MFC_GET_FREE_MEM          (0x00800301)
+
 /* MFC H/W support maximum 32 extra DPB. */
 #define MFC_MAX_EXTRA_DPB               5
 #define MFC_MAX_DISP_DELAY              0xF
@@ -416,6 +418,13 @@ struct mfc_mem_free_arg {
 };
 /* RMVME */
 
+#define MFC_FREE_MEM_PORTS              2
+
+struct mfc_free_mem_arg {
+    unsigned int total[MFC_FREE_MEM_PORTS];    /* [OUT] free bytes per port */
+    unsigned int largest[MFC_FREE_MEM_PORTS];  /* [OUT] largest free block */
+};
+
 union mfc_args {
     /*
     struct mfc_enc_init_arg enc_init;
@@ -445,6 +454,8 @@ union mfc_args {
     struct mfc_mem_alloc_arg mem_alloc;
     struct mfc_mem_free_arg mem_free;
     /* RMVME */
+
+    struct mfc_free_mem_arg free_mem;
 };
 
 struct mfc_common_args {

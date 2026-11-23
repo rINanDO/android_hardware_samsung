@@ -38,6 +38,7 @@
 #include "library_register.h"
 #include "SEC_OMX_H264dec.h"
 #include "SsbSipMfcApi.h"
+#include <android/log.h>
 #include "color_space_convertor.h"
 
 #ifdef USE_ANB
@@ -354,6 +355,56 @@ EXIT:
     return ret;
 }
 
+#define MFC_ALIGN(x, a) (((x) + (a) - 1) & ~((a) - 1))
+
+/*
+ * The MFC takes a decoder's frame buffers from two fixed memory regions when
+ * the first frame arrives. If they don't fit, decoding fails after start(),
+ * and the app gets a playback error. Check up front instead: an
+ * OMX_ErrorInsufficientResources from start() lets MediaCodec reclaim the MFC
+ * from a background app and try again. MediaCodec only does that for errors
+ * from configure() or start(), and ACodec completes start() before the
+ * component initialises the MFC, so the input port definition (configure)
+ * is checked; the check in SEC_MFC_H264Dec_Init() covers a decoder that
+ * started in between.
+ *
+ * The firmware asks for the level 4 DPB size plus 2 frames
+ * (min(32768 / MBs, 16) + 2: 1080p 6, 640x480 18); buffer sizes and
+ * alignment follow h264_set_dpbs() in the kernel driver.
+ */
+static OMX_BOOL SEC_MFC_H264Dec_FitsMFC(OMX_PTR hMFCHandle, OMX_U32 width, OMX_U32 height)
+{
+    unsigned int total[2], largest[2];
+    unsigned int w, luma, chroma, mv, mbs, dpbs, needA, needB;
+
+    if (width == 0 || height == 0)
+        return OMX_TRUE;
+    if (SsbSipMfcDecGetFreeMem(hMFCHandle, total, largest) != MFC_RET_OK)
+        return OMX_TRUE;
+
+    w = MFC_ALIGN(width, 128);
+    luma = MFC_ALIGN(w * MFC_ALIGN(height, 32), 8192);
+    chroma = MFC_ALIGN(w * MFC_ALIGN(height / 2, 32), 8192);
+    mv = MFC_ALIGN(w * MFC_ALIGN(height / 4, 32), 8192);
+    mbs = ((width + 15) / 16) * ((height + 15) / 16);
+    dpbs = 32768 / mbs;
+    if (dpbs > 16)
+        dpbs = 16;
+    dpbs += 2 + H264_DEC_NUM_OF_EXTRA_BUFFERS;
+
+    /* Port A: input buffers, codec buffers (440 KB) and chroma; port B: luma and mv */
+    needA = DEFAULT_MFC_INPUT_BUFFER_SIZE + 512 * 1024 + dpbs * chroma;
+    needB = dpbs * (luma + mv);
+
+    if (total[0] >= needA && total[1] >= needB && largest[0] >= chroma && largest[1] >= luma)
+        return OMX_TRUE;
+
+    __android_log_print(ANDROID_LOG_WARN, SEC_LOG_TAG,
+        "%ux%u needs %u + %u KB of MFC memory (%u frames), %u + %u KB free",
+        width, height, needA / 1024, needB / 1024, dpbs, total[0] / 1024, total[1] / 1024);
+    return OMX_FALSE;
+}
+
 OMX_ERRORTYPE SEC_MFC_H264Dec_SetParameter(
     OMX_IN OMX_HANDLETYPE hComponent,
     OMX_IN OMX_INDEXTYPE  nIndex,
@@ -457,6 +508,12 @@ OMX_ERRORTYPE SEC_MFC_H264Dec_SetParameter(
         }
         if (pPortDefinition->nBufferCountActual < pSECPort->portDefinition.nBufferCountMin) {
             ret = OMX_ErrorBadParameter;
+            goto EXIT;
+        }
+        if (portIndex == INPUT_PORT_INDEX &&
+            !SEC_MFC_H264Dec_FitsMFC(NULL, pPortDefinition->format.video.nFrameWidth,
+                                     pPortDefinition->format.video.nFrameHeight)) {
+            ret = OMX_ErrorInsufficientResources;
             goto EXIT;
         }
 
@@ -820,6 +877,13 @@ OMX_ERRORTYPE SEC_MFC_H264Dec_Init(OMX_COMPONENTTYPE *pOMXComponent)
     }
 
     if (hMFCHandle == NULL) {
+        ret = OMX_ErrorInsufficientResources;
+        goto EXIT;
+    }
+    if (!SEC_MFC_H264Dec_FitsMFC(hMFCHandle,
+            pSECComponent->pSECPort[INPUT_PORT_INDEX].portDefinition.format.video.nFrameWidth,
+            pSECComponent->pSECPort[INPUT_PORT_INDEX].portDefinition.format.video.nFrameHeight)) {
+        SsbSipMfcDecClose(hMFCHandle);
         ret = OMX_ErrorInsufficientResources;
         goto EXIT;
     }
