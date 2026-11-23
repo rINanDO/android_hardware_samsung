@@ -255,12 +255,26 @@ static int gralloc_alloc_ion(alloc_device_t *dev, size_t size, int usage,
     }
 
     *ion_fd = ion_alloc(m->ion_client, size, 0, ion_flags);
-    if (*ion_fd < 0) {
-        ALOGE("%s Failed to ion_alloc", __func__);
-        return -1;
+    if (*ion_fd >= 0) {
+        *ion_paddr = ion_getphys(m->ion_client, *ion_fd);
+    } else {
+        // The contiguous heap is full, e.g. while another app holds 1080p
+        // video buffers. The UMP-only fallback has no ION fd, so other
+        // processes can't import the buffer and Codec2 software decoders
+        // (thumbnails, a second video) fail. Take non-contiguous ION memory
+        // instead: it keeps an ION fd and UMP imports its scatterlist, but it
+        // has no physical address, so FIMC and the composer treat it like any
+        // other buffer without one.
+        ion_flags = (ion_flags & ~ION_HEAP_EXYNOS_CONTIG_MASK) | ION_HEAP_EXYNOS_MASK;
+        *ion_fd = ion_alloc(m->ion_client, size, 0, ion_flags);
+        if (*ion_fd < 0) {
+            ALOGE("%s Failed to ion_alloc", __func__);
+            return -1;
+        }
+        ALOGW("%s: contiguous ION heap full, using non-contiguous ION memory (size: %d)",
+                __func__, size);
+        *ion_paddr = 0;
     }
-
-    *ion_paddr = ion_getphys(m->ion_client, *ion_fd);
 
 /* TODO: #ifdef SAMSUNG_EXYNOS_CACHE_UMP here...*/
     if (usage & GRALLOC_USAGE_PRIVATE_NONECACHE) {
@@ -270,6 +284,14 @@ static int gralloc_alloc_ion(alloc_device_t *dev, size_t size, int usage,
         ALOGD_IF(debug_level > 0, "%s FIMC1 cached", __func__);
         *ump_mem_handle = ump_ref_drv_ion_import(*ion_fd, UMP_REF_DRV_CONSTRAINT_USE_CACHE);
         ump_cpu_msync_now((ump_handle)*ump_mem_handle, UMP_MSYNC_CLEAN_AND_INVALIDATE, NULL, 0);
+    }
+
+    if (*ion_paddr == 0 && *ump_mem_handle == UMP_INVALID_MEMORY_HANDLE) {
+        // UMP takes at most 1023 blocks; leave it to the UMP-only fallback.
+        ALOGW("%s: UMP can't import non-contiguous ION memory (size: %d)", __func__, size);
+        close(*ion_fd);
+        *ion_fd = 0;
+        return -1;
     }
     return 0;
 }
